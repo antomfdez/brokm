@@ -280,6 +280,17 @@ static void compile_index_set(Expr *expr) {
   emit_byte(OP_INDEX_SET);
 }
 
+static void compile_field(Expr *expr) {
+  compile_expr(expr->as.field.object);
+  emit_bytes(OP_GET_FIELD, identifier_constant(expr->as.field.name));
+}
+
+static void compile_field_set(Expr *expr) {
+  compile_expr(expr->as.field_set.object);
+  compile_expr(expr->as.field_set.value);
+  emit_bytes(OP_SET_FIELD, identifier_constant(expr->as.field_set.name));
+}
+
 static void compile_expr(Expr *expr) {
   currentLine = expr->line;
   switch (expr->kind) {
@@ -292,6 +303,8 @@ static void compile_expr(Expr *expr) {
     case EXPR_ARRAY: compile_array(expr); break;
     case EXPR_INDEX: compile_index(expr); break;
     case EXPR_INDEX_SET: compile_index_set(expr); break;
+    case EXPR_FIELD: compile_field(expr); break;
+    case EXPR_FIELD_SET: compile_field_set(expr); break;
     case EXPR_BINARY:
       compile_expr(expr->as.binary.left);
       compile_expr(expr->as.binary.right);
@@ -513,6 +526,14 @@ static void compile_function_decl(Stmt *stmt) {
   emit_bytes(OP_DEFINE_GLOBAL, identifier_constant(stmt->as.func.name));
 }
 
+static void compile_class_decl(Stmt *stmt) {
+  NameList *fields = &stmt->as.klass.fields;
+  ObjClass *klass = class_new(stmt->as.klass.name, fields->count);
+  for (int i = 0; i < fields->count; i++) klass->fields[i] = fields->items[i];
+  emit_bytes(OP_CONSTANT, (U8)make_constant(OBJ_VAL(klass)));
+  emit_bytes(OP_DEFINE_GLOBAL, identifier_constant(stmt->as.klass.name));
+}
+
 static void compile_stmt(Stmt *stmt) {
   currentLine = stmt->line;
   switch (stmt->kind) {
@@ -532,6 +553,7 @@ static void compile_stmt(Stmt *stmt) {
     case STMT_CONTINUE: compile_continue(stmt); break;
     case STMT_SWITCH: compile_switch(stmt); break;
     case STMT_FUNCTION: compile_function_decl(stmt); break;
+    case STMT_CLASS: compile_class_decl(stmt); break;
   }
 }
 

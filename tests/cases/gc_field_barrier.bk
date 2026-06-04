@@ -1,0 +1,10 @@
+// Write barrier through a struct field: an old instance holding a young string
+// in a field. The young value survives the minor collection only because the
+// field store recorded the old->young edge. (-DBK_NO_WRITE_BARRIER -> fails.)
+class Holder { U0 v; }
+Holder h = Holder(0);
+GcMinor();             // h (a global root) is promoted to the old generation
+h.v = "wor" + "ld";    // young string into the now-old instance field
+GcMinor();             // minor skips old h; the barrier keeps "world" alive
+GcMinor();
+"%s\n", h.v;

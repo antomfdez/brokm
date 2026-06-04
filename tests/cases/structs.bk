@@ -1,0 +1,21 @@
+// Classes: construction, field get/set, default construction, reference
+// semantics, and a struct holding an array.
+class Point { I64 x; I64 y; }
+
+Point p = Point(3, 4);
+"%d %d\n", p.x, p.y;
+p.x = 10;
+"%d %d\n", p.x, p.y;
+
+Point q;          // default-constructed: fields start nil
+q.x = 1;
+q.y = 2;
+"%d %d\n", q.x, q.y;
+
+Point r = p;      // r and p are the same instance (reference semantics)
+r.y = 99;
+"%d\n", p.y;
+
+class Box { U0 items; I64 n; }
+Box b = Box([5, 6, 7], 3);
+"%d %d\n", b.items[0], b.n;

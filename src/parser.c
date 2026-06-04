@@ -12,11 +12,29 @@
 typedef struct {
   Token current;
   Token previous;
+  Token next; /* one-token lookahead */
   bool hadError;
   bool panicMode;
 } Parser;
 
 static Parser parser;
+
+/* Names declared with `class` in this parse, so the parser can recognize
+ * `ClassName var;` declarations (class names are ordinary identifiers). */
+#define MAX_CLASS_NAMES 256
+static ObjString *classNames[MAX_CLASS_NAMES];
+static int classNameCount;
+
+static void register_class_name(ObjString *name) {
+  if (classNameCount < MAX_CLASS_NAMES) classNames[classNameCount++] = name;
+}
+
+static bool is_class_name(ObjString *name) {
+  for (int i = 0; i < classNameCount; i++) {
+    if (classNames[i] == name) return true;
+  }
+  return false;
+}
 
 /* ---- error handling --------------------------------------------------- */
 
@@ -40,16 +58,22 @@ static void error_at_current(const char *message) {
 
 /* ---- token cursor ----------------------------------------------------- */
 
-static void advance(void) {
-  parser.previous = parser.current;
+static Token scan_nonerror(void) {
   for (;;) {
-    parser.current = lexer_next();
-    if (parser.current.type != TOKEN_ERROR) break;
-    error_at_current(parser.current.start);
+    Token t = lexer_next();
+    if (t.type != TOKEN_ERROR) return t;
+    error_at(&t, t.start);
   }
 }
 
+static void advance(void) {
+  parser.previous = parser.current;
+  parser.current = parser.next;
+  parser.next = scan_nonerror();
+}
+
 static bool check(TokenType type) { return parser.current.type == type; }
+static bool check_next(TokenType type) { return parser.next.type == type; }
 
 static bool match(TokenType type) {
   if (!check(type)) return false;
@@ -347,6 +371,23 @@ static Expr *index_expr(bool canAssign, Expr *left) {
   return e;
 }
 
+static Expr *dot_expr(bool canAssign, Expr *left) {
+  consume(TOKEN_IDENTIFIER, "Expect field name after '.'.");
+  ObjString *name = intern_token(parser.previous);
+  int line = parser.previous.line;
+  if (canAssign && match(TOKEN_EQ)) {
+    Expr *e = expr_new(EXPR_FIELD_SET, line);
+    e->as.field_set.object = left;
+    e->as.field_set.name = name;
+    e->as.field_set.value = expression();
+    return e;
+  }
+  Expr *e = expr_new(EXPR_FIELD, line);
+  e->as.field.object = left;
+  e->as.field.name = name;
+  return e;
+}
+
 static Expr *call(bool canAssign, Expr *left) {
   (void)canAssign;
   int line = parser.previous.line;
@@ -365,6 +406,7 @@ static Expr *call(bool canAssign, Expr *left) {
 static const ParseRule rules[] = {
     [TOKEN_LPAREN] = {grouping, call, PREC_CALL},
     [TOKEN_LBRACKET] = {array_literal, index_expr, PREC_CALL},
+    [TOKEN_DOT] = {NULL, dot_expr, PREC_CALL},
     [TOKEN_MINUS] = {unary, binary, PREC_TERM},
     [TOKEN_PLUS] = {NULL, binary, PREC_TERM},
     [TOKEN_STAR] = {NULL, binary, PREC_FACTOR},
@@ -442,6 +484,7 @@ static void synchronize(void) {
       case TOKEN_DO:
       case TOKEN_RETURN:
       case TOKEN_SWITCH:
+      case TOKEN_CLASS:
       case TOKEN_LBRACE:
         return;
       default:;
@@ -614,6 +657,62 @@ static Stmt *switch_statement(void) {
   return s;
 }
 
+static bool current_is_class(void) {
+  if (parser.current.type != TOKEN_IDENTIFIER) return false;
+  return is_class_name(
+      string_copy(parser.current.start, parser.current.length));
+}
+
+static Stmt *class_declaration(void) {
+  int line = parser.previous.line;
+  consume(TOKEN_IDENTIFIER, "Expect class name.");
+  ObjString *name = intern_token(parser.previous);
+  register_class_name(name);
+
+  Stmt *s = stmt_new(STMT_CLASS, line);
+  s->as.klass.name = name;
+  namelist_init(&s->as.klass.fields);
+
+  consume(TOKEN_LBRACE, "Expect '{' before class body.");
+  while (!check(TOKEN_RBRACE) && !check(TOKEN_EOF)) {
+    consume(TOKEN_TYPE, "Expect field type.");
+    if (match(TOKEN_LBRACKET)) {
+      consume(TOKEN_RBRACKET, "Expect ']' in array type.");
+    }
+    consume(TOKEN_IDENTIFIER, "Expect field name.");
+    namelist_write(&s->as.klass.fields, intern_token(parser.previous));
+    consume(TOKEN_SEMICOLON, "Expect ';' after field declaration.");
+  }
+  consume(TOKEN_RBRACE, "Expect '}' after class body.");
+  match(TOKEN_SEMICOLON); /* optional trailing ';' */
+  return s;
+}
+
+/* `ClassName var;` or `ClassName var = expr;` - a bare declaration default-
+ * constructs by calling the class. */
+static Stmt *class_var_declaration(void) {
+  advance(); /* consume the class name into `previous` */
+  ObjString *className = intern_token(parser.previous);
+  int line = parser.previous.line;
+  consume(TOKEN_IDENTIFIER, "Expect variable name.");
+  ObjString *name = intern_token(parser.previous);
+
+  Expr *init;
+  if (match(TOKEN_EQ)) {
+    init = expression();
+  } else {
+    init = expr_new(EXPR_CALL, line);
+    init->as.call.callee = make_variable(className, line);
+    exprlist_init(&init->as.call.args);
+  }
+  consume(TOKEN_SEMICOLON, "Expect ';' after variable declaration.");
+
+  Stmt *s = stmt_new(STMT_VAR, line);
+  s->as.var.name = name;
+  s->as.var.init = init;
+  return s;
+}
+
 static Stmt *simple_statement(StmtKind kind) {
   int line = parser.previous.line;
   consume(TOKEN_SEMICOLON, "Expect ';' after statement.");
@@ -651,8 +750,13 @@ static Stmt *statement(void) {
 
 static Stmt *declaration(void) {
   Stmt *s;
-  if (match(TOKEN_TYPE)) {
+  if (match(TOKEN_CLASS)) {
+    s = class_declaration();
+  } else if (match(TOKEN_TYPE)) {
     s = typed_declaration();
+  } else if (check(TOKEN_IDENTIFIER) && check_next(TOKEN_IDENTIFIER) &&
+             current_is_class()) {
+    s = class_var_declaration();
   } else {
     s = statement();
   }
@@ -664,8 +768,10 @@ bool parse(const char *source, StmtList *out) {
   lexer_init(source);
   parser.hadError = false;
   parser.panicMode = false;
+  classNameCount = 0;
   stmtlist_init(out);
-  advance();
+  parser.current = scan_nonerror();
+  parser.next = scan_nonerror();
   while (!check(TOKEN_EOF)) {
     stmtlist_write(out, declaration());
   }

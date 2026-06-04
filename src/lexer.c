@@ -114,6 +114,7 @@ static const Keyword KEYWORDS[] = {
     {"for", TOKEN_FOR},   {"do", TOKEN_DO},     {"return", TOKEN_RETURN},
     {"switch", TOKEN_SWITCH}, {"case", TOKEN_CASE}, {"default", TOKEN_DEFAULT},
     {"break", TOKEN_BREAK}, {"continue", TOKEN_CONTINUE},
+    {"class", TOKEN_CLASS}, {"struct", TOKEN_CLASS},
     {"TRUE", TOKEN_TRUE}, {"FALSE", TOKEN_FALSE}, {"NULL", TOKEN_NIL},
 };
 
@@ -201,6 +202,7 @@ Token lexer_next(void) {
     case ',': return make_token(TOKEN_COMMA);
     case ';': return make_token(TOKEN_SEMICOLON);
     case ':': return make_token(TOKEN_COLON);
+    case '.': return make_token(TOKEN_DOT);
     case '~': return make_token(TOKEN_TILDE);
     case '"': return string();
     case '\'': return character();

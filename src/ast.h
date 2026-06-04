@@ -41,7 +41,9 @@ typedef enum {
   EXPR_CALL,
   EXPR_ARRAY,      /* [a, b, c] */
   EXPR_INDEX,      /* obj[index] */
-  EXPR_INDEX_SET   /* obj[index] = value */
+  EXPR_INDEX_SET,  /* obj[index] = value */
+  EXPR_FIELD,      /* obj.name */
+  EXPR_FIELD_SET   /* obj.name = value */
 } ExprKind;
 
 struct Expr {
@@ -58,6 +60,8 @@ struct Expr {
     struct { ExprList elements; } array;
     struct { Expr *object; Expr *index; } index;
     struct { Expr *object; Expr *index; Expr *value; } index_set;
+    struct { Expr *object; ObjString *name; } field;
+    struct { Expr *object; ObjString *name; Expr *value; } field_set;
   } as;
 };
 
@@ -74,7 +78,8 @@ typedef enum {
   STMT_FUNCTION,
   STMT_BREAK,
   STMT_CONTINUE,
-  STMT_SWITCH
+  STMT_SWITCH,
+  STMT_CLASS
 } StmtKind;
 
 typedef struct {
@@ -103,6 +108,7 @@ struct Stmt {
     struct { ExprList args; } print;
     struct { ObjString *name; NameList params; Stmt *body; } func;
     struct { Expr *disc; CaseList cases; } switchf;
+    struct { ObjString *name; NameList fields; } klass;
   } as;
 };
 

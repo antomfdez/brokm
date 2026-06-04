@@ -114,6 +114,23 @@ static bool call_value(Value callee, int argCount) {
         vm_push(result);
         return true;
       }
+      case OBJ_CLASS: {
+        ObjClass *klass = AS_CLASS(callee);
+        if (argCount > klass->fieldCount) {
+          runtime_error("%s takes at most %d fields but got %d.",
+                        klass->name->chars, klass->fieldCount, argCount);
+          return false;
+        }
+        ObjInstance *inst = instance_new(klass);
+        vm_push(OBJ_VAL(inst)); /* protect across field-table growth */
+        for (int i = 0; i < klass->fieldCount; i++) {
+          Value v = (i < argCount) ? vm.stackTop[-1 - argCount + i] : NIL_VAL;
+          table_set(&inst->fields, klass->fields[i], v);
+        }
+        vm.stackTop -= argCount + 2; /* drop inst, args, and callee */
+        vm_push(OBJ_VAL(inst));
+        return true;
+      }
       default:
         break;
     }
@@ -437,6 +454,46 @@ static InterpretResult run(void) {
         }
         array->elements.values[i] = value;
         gc_write_barrier((Obj *)array, value); /* may be old->young */
+        vm_push(value);
+        break;
+      }
+      case OP_GET_FIELD: {
+        ObjString *name = READ_STRING();
+        Value objVal = vm_pop();
+        if (!IS_INSTANCE(objVal)) {
+          runtime_error("Only instances have fields.");
+          return BK_RUNTIME_ERROR;
+        }
+        ObjInstance *inst = AS_INSTANCE(objVal);
+        Value value;
+        if (!table_get(&inst->fields, name, &value)) {
+          runtime_error("%s has no field '%s'.", inst->klass->name->chars,
+                        name->chars);
+          return BK_RUNTIME_ERROR;
+        }
+        vm_push(value);
+        break;
+      }
+      case OP_SET_FIELD: {
+        ObjString *name = READ_STRING();
+        Value value = peek(0);
+        Value objVal = peek(1);
+        if (!IS_INSTANCE(objVal)) {
+          runtime_error("Only instances have fields.");
+          return BK_RUNTIME_ERROR;
+        }
+        ObjInstance *inst = AS_INSTANCE(objVal);
+        Value existing;
+        if (!table_get(&inst->fields, name, &existing)) {
+          runtime_error("%s has no field '%s'.", inst->klass->name->chars,
+                        name->chars);
+          return BK_RUNTIME_ERROR;
+        }
+        /* both operands stay on the stack across the (possibly collecting) set */
+        table_set(&inst->fields, name, value);
+        gc_write_barrier((Obj *)inst, value);
+        vm_pop(); /* value */
+        vm_pop(); /* instance */
         vm_push(value);
         break;
       }

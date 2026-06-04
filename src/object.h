@@ -8,13 +8,16 @@
 
 #include "chunk.h"
 #include "common.h"
+#include "table.h"
 #include "value.h"
 
 typedef enum {
   OBJ_STRING,
   OBJ_FUNCTION,
   OBJ_NATIVE,
-  OBJ_ARRAY
+  OBJ_ARRAY,
+  OBJ_CLASS,
+  OBJ_INSTANCE
 } ObjType;
 
 struct Obj {
@@ -51,16 +54,33 @@ typedef struct {
   ValueArray elements;
 } ObjArray;
 
+typedef struct {
+  Obj obj;
+  ObjString *name;
+  int fieldCount;
+  ObjString **fields; /* declared field names, in order */
+} ObjClass;
+
+typedef struct {
+  Obj obj;
+  ObjClass *klass;
+  Table fields; /* field name -> value */
+} ObjInstance;
+
 #define OBJ_TYPE(v)    (AS_OBJ(v)->type)
 #define IS_STRING(v)   object_is_type(v, OBJ_STRING)
 #define IS_FUNCTION(v) object_is_type(v, OBJ_FUNCTION)
 #define IS_NATIVE(v)   object_is_type(v, OBJ_NATIVE)
 #define IS_ARRAY(v)    object_is_type(v, OBJ_ARRAY)
+#define IS_CLASS(v)    object_is_type(v, OBJ_CLASS)
+#define IS_INSTANCE(v) object_is_type(v, OBJ_INSTANCE)
 #define AS_STRING(v)   ((ObjString *)AS_OBJ(v))
 #define AS_CSTRING(v)  (((ObjString *)AS_OBJ(v))->chars)
 #define AS_FUNCTION(v) ((ObjFunction *)AS_OBJ(v))
 #define AS_NATIVE(v)   ((ObjNative *)AS_OBJ(v))
 #define AS_ARRAY(v)    ((ObjArray *)AS_OBJ(v))
+#define AS_CLASS(v)    ((ObjClass *)AS_OBJ(v))
+#define AS_INSTANCE(v) ((ObjInstance *)AS_OBJ(v))
 
 static inline bool object_is_type(Value v, ObjType type) {
   return IS_OBJ(v) && AS_OBJ(v)->type == type;
@@ -74,6 +94,8 @@ ObjFunction *function_new(void);
 ObjNative *native_new(NativeFn fn, ObjString *name);
 ObjArray *array_new(void);
 void array_append(ObjArray *array, Value value); /* applies the GC write barrier */
+ObjClass *class_new(ObjString *name, int fieldCount);
+ObjInstance *instance_new(ObjClass *klass);
 
 void object_print(Value v);
 void object_free(Obj *obj);  /* free one object (used by the GC sweep) */

@@ -55,26 +55,26 @@ region/arena allocation are only meaningful once the language can hold and deref
 pointers/arrays — without that there are no call sites to manage. The same prerequisite
 (mutable aggregates) is what makes the write barrier above non-trivial. See the milestone below.
 
-## v0.3.5 — Aggregates: arrays ✅ · structs/pointers (next)
+## v0.3.5 — Aggregates: arrays ✅ · classes/structs ✅
 
-**Dynamic arrays ✅ (done).** Heap `ObjArray` holding any values; literal `[a, b, c]`,
-indexing `a[i]` (get/set), nesting, and `Len`/`Append` builtins (`OP_ARRAY`, `OP_INDEX_GET`,
-`OP_INDEX_SET`). Element stores apply the GC write barrier.
+**Dynamic arrays ✅.** Heap `ObjArray` holding any values; literal `[a, b, c]`, indexing `a[i]`
+(get/set), nesting, and `Len`/`Append` builtins (`OP_ARRAY`, `OP_INDEX_GET`, `OP_INDEX_SET`).
 
-This made the generational write barrier **load-bearing and verified**: the minor collector now
-skips the old generation entirely, so a young value reachable only through an old array survives
-only because `gc_write_barrier` recorded the edge. `tests/cases/gc_barrier.bk` proves it
-red/green — building with `-DBK_NO_WRITE_BARRIER` makes it fail (the young element is collected),
-and the default build keeps it alive.
+**Classes/structs ✅.** `class`/`struct` reference-semantics objects (`ObjClass`, `ObjInstance`)
+with typed fields; construction by calling the class (`Point(3, 4)`), `Point p;` default
+construction, and `p.x` field get/set (`OP_GET_FIELD`, `OP_SET_FIELD`). The parser recognizes
+class names as types via one-token lookahead.
 
-**Structs/classes + pointers (next).** `class`/`struct` with mutable fields and a
-pointer/reference notion. These add more write-barrier call sites and, crucially, give
-**manual memory** something to manage.
+Both made the generational write barrier **load-bearing and verified**: the minor collector
+skips the old generation entirely, so a young value reachable only through an old array element
+or an old instance field survives only because `gc_write_barrier` recorded the edge.
+`tests/cases/gc_barrier.bk` (array) and `gc_field_barrier.bk` (field) prove it red/green —
+building with `-DBK_NO_WRITE_BARRIER` makes them fail; the default build keeps the values alive.
 
-## v0.3.6 — Manual-memory mode (after pointers)
+## v0.3.6 — Manual-memory mode + pointers (next)
 
-Opt-in `MAlloc` / `Free` and region/arena allocation that bypass the collector, for low-level,
-deterministic workloads. Needs the pointer/aggregate support from v0.3.5 to be meaningful.
+Opt-in `MAlloc` / `Free` and region/arena allocation that bypass the collector, plus the
+pointer/`&`/`*` primitives that make them usable, for low-level, deterministic workloads.
 
 ## v0.4 — Static type checking
 

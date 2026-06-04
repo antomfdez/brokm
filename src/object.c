@@ -90,6 +90,23 @@ void array_append(ObjArray *array, Value value) {
   gc_write_barrier((Obj *)array, value);
 }
 
+ObjClass *class_new(ObjString *name, int fieldCount) {
+  ObjClass *klass = (ObjClass *)allocate_object(sizeof(ObjClass), OBJ_CLASS);
+  klass->name = name;
+  klass->fieldCount = fieldCount;
+  klass->fields = fieldCount > 0 ? ALLOCATE(ObjString *, fieldCount) : NULL;
+  for (int i = 0; i < fieldCount; i++) klass->fields[i] = NULL;
+  return klass;
+}
+
+ObjInstance *instance_new(ObjClass *klass) {
+  ObjInstance *instance =
+      (ObjInstance *)allocate_object(sizeof(ObjInstance), OBJ_INSTANCE);
+  instance->klass = klass;
+  table_init(&instance->fields);
+  return instance;
+}
+
 static void print_function(ObjFunction *function) {
   if (function->name == NULL) {
     printf("<script>");
@@ -113,6 +130,10 @@ void object_print(Value v) {
     case OBJ_FUNCTION: print_function(AS_FUNCTION(v)); break;
     case OBJ_NATIVE:   printf("<native %s>", AS_NATIVE(v)->name->chars); break;
     case OBJ_ARRAY:    print_array(AS_ARRAY(v)); break;
+    case OBJ_CLASS:    printf("<class %s>", AS_CLASS(v)->name->chars); break;
+    case OBJ_INSTANCE:
+      printf("<%s instance>", AS_INSTANCE(v)->klass->name->chars);
+      break;
     default:           printf("<obj>"); break;
   }
 }
@@ -138,6 +159,18 @@ void object_free(Obj *obj) {
       ObjArray *a = (ObjArray *)obj;
       value_array_free(&a->elements);
       FREE(ObjArray, obj);
+      break;
+    }
+    case OBJ_CLASS: {
+      ObjClass *c = (ObjClass *)obj;
+      FREE_ARRAY(ObjString *, c->fields, c->fieldCount);
+      FREE(ObjClass, obj);
+      break;
+    }
+    case OBJ_INSTANCE: {
+      ObjInstance *inst = (ObjInstance *)obj;
+      table_free(&inst->fields);
+      FREE(ObjInstance, obj);
       break;
     }
   }

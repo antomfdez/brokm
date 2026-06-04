@@ -93,6 +93,29 @@ U0[] grid = [[1, 0], [0, 1]];
 Indices are integers; out-of-bounds access and indexing a non-array are runtime
 errors.
 
+## Classes / structs
+
+`class` (or `struct`) declares a reference-semantics object type with typed fields:
+
+```c
+class Point { I64 x; I64 y; }
+
+Point p = Point(3, 4);   // construct by calling the class (positional fields)
+Point q;                 // default-construct; fields start nil
+"%d\n", p.x;             // field read
+p.x = 10;                // field assignment
+Point r = p;             // r and p reference the SAME instance
+r.y = 99;                // ...so this also changes p.y
+```
+
+- Instances live on the heap and are passed by reference (assignment/argument
+  passing shares the instance, it does not copy).
+- Construction sets fields positionally; omitted trailing fields are nil.
+- Only declared fields may be read or written; touching an unknown field is a
+  runtime error. Fields may hold any value, including arrays and other instances.
+- `class` and `struct` are synonyms. There are no pointers or methods yet (see
+  the roadmap); behavior is written as free functions taking instances.
+
 ## Built-in functions
 
 - `Print(fmt, ...)` — same printf-style formatter as a bare string statement.

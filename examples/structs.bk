@@ -1,0 +1,20 @@
+// Classes/structs: reference-semantics objects with fields.
+class Vec2 { F64 x; F64 y; }
+
+F64 Dot(U0 a, U0 b) { return a.x * b.x + a.y * b.y; }
+
+Vec2 u = Vec2(1.0, 2.0);
+Vec2 v = Vec2(3.0, 4.0);
+"u . v = %g\n", Dot(u, v);
+
+// Fields are mutable; instances are references.
+Vec2 w = u;
+w.x = 10.0;
+"u.x is now %g (w aliases u)\n", u.x;
+
+// Structs compose with arrays and other structs.
+class Polyline { U0 points; I64 count; }
+Polyline line;
+line.points = [Vec2(0.0, 0.0), Vec2(1.0, 1.0)];
+line.count = Len(line.points);
+"line has %d points; first.y = %g\n", line.count, line.points[0].y;

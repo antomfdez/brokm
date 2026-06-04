@@ -47,6 +47,8 @@ make debug        # ASan/UBSan + bytecode/exec tracing build
 - **Printing**: a bare string statement prints, with printf-style args:
   `"x = %d\n", x;` — or call `Print(...)`.
 - **Arrays**: dynamic, heap-allocated — `I64[] a = [1, 2, 3]; a[0] = 9;` with `Len`/`Append`.
+- **Classes/structs**: `class Point { I64 x; I64 y; }`, `Point p = Point(3, 4); p.x = 9;`
+  (reference semantics).
 - **Control flow**: `if/else`, `while`, `for`, `do/while`, `switch/case/default`,
   `break`, `continue`, `return`.
 - **Operators**: `+ - * / %`, comparisons, `&& || !`, bitwise `& | ^ ~ << >>`,
@@ -71,9 +73,9 @@ int main(void) {
 ## Status
 
 v0.3.5 runs real programs (arithmetic, variables, control flow, functions, recursion, strings,
-**dynamic arrays**, printing) on a stack bytecode VM, with a precise **generational** mark-sweep
-collector (minor + major, young→old promotion) whose write barrier is exercised by array
-mutation and verified red/green. Next up: structs/pointers, which then unlock the opt-in
+**dynamic arrays**, **classes/structs**, printing) on a stack bytecode VM, with a precise
+**generational** mark-sweep collector (minor + major, young→old promotion) whose write barrier is
+exercised by array and field mutation and verified red/green. Next up: pointers + the opt-in
 manual-memory mode — see the roadmap.
 
 ## License

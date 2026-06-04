@@ -89,6 +89,26 @@ static void blacken_object(Obj *object) {
       }
       break;
     }
+    case OBJ_CLASS: {
+      ObjClass *klass = (ObjClass *)object;
+      mark_object((Obj *)klass->name);
+      for (int i = 0; i < klass->fieldCount; i++) {
+        mark_object((Obj *)klass->fields[i]);
+      }
+      break;
+    }
+    case OBJ_INSTANCE: {
+      ObjInstance *inst = (ObjInstance *)object;
+      mark_object((Obj *)inst->klass);
+      for (int i = 0; i < inst->fields.capacity; i++) {
+        Entry *entry = &inst->fields.entries[i];
+        if (entry->key != NULL) {
+          mark_object((Obj *)entry->key);
+          mark_value(entry->value);
+        }
+      }
+      break;
+    }
     case OBJ_STRING:
       break;
   }

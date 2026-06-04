@@ -44,6 +44,8 @@ typedef enum {
   OP_ARRAY,          /* operand: element count */
   OP_INDEX_GET,
   OP_INDEX_SET,
+  OP_GET_FIELD,      /* operand: field-name constant index */
+  OP_SET_FIELD,      /* operand: field-name constant index */
   OP_RETURN
 } OpCode;
 

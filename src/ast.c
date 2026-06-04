@@ -122,6 +122,13 @@ void free_expr(Expr *expr) {
       free_expr(expr->as.index_set.index);
       free_expr(expr->as.index_set.value);
       break;
+    case EXPR_FIELD:
+      free_expr(expr->as.field.object);
+      break;
+    case EXPR_FIELD_SET:
+      free_expr(expr->as.field_set.object);
+      free_expr(expr->as.field_set.value);
+      break;
   }
   FREE(Expr, expr);
 }
@@ -186,6 +193,10 @@ void free_stmt(Stmt *stmt) {
       }
       FREE_ARRAY(SwitchCase, stmt->as.switchf.cases.items,
                  stmt->as.switchf.cases.capacity);
+      break;
+    case STMT_CLASS:
+      FREE_ARRAY(ObjString *, stmt->as.klass.fields.items,
+                 stmt->as.klass.fields.capacity);
       break;
     case STMT_BREAK:
     case STMT_CONTINUE:
