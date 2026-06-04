@@ -5,10 +5,10 @@ language with a clean [HolyC](https://en.wikipedia.org/wiki/TempleOS#HolyC)-flav
 It is built primarily for its author's own use, with four design goals: **small, fast, robust,
 and easy to embed**.
 
-This is **v0.3**: a working bytecode VM with a precise, **generational** mark-sweep garbage
-collector. A JIT compiler, aggregate types (arrays/structs), and an opt-in manual-memory mode are
-on the roadmap — the engine is structured so they slot in without rewrites
-(see [docs/ROADMAP.md](docs/ROADMAP.md)).
+This is **v0.3.6**: a working bytecode VM with a precise, **generational** mark-sweep garbage
+collector, aggregate types (arrays + classes/structs), and an opt-in **manual-memory** mode for
+low-level work. A static type checker and a JIT compiler are next on the roadmap — the engine is
+structured so they slot in without rewrites (see [docs/ROADMAP.md](docs/ROADMAP.md)).
 
 ```holyc
 // hello.bk — top-level code runs; a bare string statement prints.
@@ -49,6 +49,8 @@ make debug        # ASan/UBSan + bytecode/exec tracing build
 - **Arrays**: dynamic, heap-allocated — `I64[] a = [1, 2, 3]; a[0] = 9;` with `Len`/`Append`.
 - **Classes/structs**: `class Point { I64 x; I64 y; }`, `Point p = Point(3, 4); p.x = 9;`
   (reference semantics).
+- **Manual memory**: `U0 b = MAlloc(32); PokeI64(b, 0, 42); Free(b);` — raw, GC-invisible
+  buffers with typed peek/poke, plus `GcDisable`/`GcEnable`.
 - **Control flow**: `if/else`, `while`, `for`, `do/while`, `switch/case/default`,
   `break`, `continue`, `return`.
 - **Operators**: `+ - * / %`, comparisons, `&& || !`, bitwise `& | ^ ~ << >>`,
@@ -72,11 +74,11 @@ int main(void) {
 
 ## Status
 
-v0.3.5 runs real programs (arithmetic, variables, control flow, functions, recursion, strings,
-**dynamic arrays**, **classes/structs**, printing) on a stack bytecode VM, with a precise
-**generational** mark-sweep collector (minor + major, young→old promotion) whose write barrier is
-exercised by array and field mutation and verified red/green. Next up: pointers + the opt-in
-manual-memory mode — see the roadmap.
+v0.3.6 runs real programs (arithmetic, variables, control flow, functions, recursion, strings,
+**dynamic arrays**, **classes/structs**, **manual memory**, printing) on a stack bytecode VM,
+with a precise **generational** mark-sweep collector (minor + major, young→old promotion) whose
+write barrier is exercised by array and field mutation and verified red/green. Next up: a static
+type checker, then a JIT — see the roadmap.
 
 ## License
 

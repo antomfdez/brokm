@@ -1,0 +1,27 @@
+// Manual memory: raw buffers via MAlloc/Free with typed element access.
+U0 buf = MAlloc(32);              // room for 4 x I64
+I64 i = 0;
+for (i = 0; i < 4; ++i) PokeI64(buf, i, (i + 1) * 10);
+I64 sum = 0;
+for (i = 0; i < 4; ++i) sum = sum + PeekI64(buf, i);
+"sum=%d buf[2]=%d\n", sum, PeekI64(buf, 2);
+
+U0 bytes = MAlloc(2);
+PokeU8(bytes, 0, 72);
+PokeU8(bytes, 1, 105);
+"%c%c\n", PeekU8(bytes, 0), PeekU8(bytes, 1);
+
+U0 fb = MAlloc(8);
+PokeF64(fb, 0, 2.5);
+"%g\n", PeekF64(fb, 0);
+
+// manual indirection: a cell holding a pointer to buf
+U0 cell = MAlloc(8);
+PokePtr(cell, 0, buf);
+"%d\n", PeekI64(PeekPtr(cell, 0), 0);
+
+Free(cell);
+Free(fb);
+Free(bytes);
+Free(buf);
+"freed\n";

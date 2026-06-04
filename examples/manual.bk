@@ -1,0 +1,33 @@
+// Manual memory: a hand-built singly linked list of I64, with no GC tracking.
+// Each node is 16 bytes laid out as [0]=value (I64), [1]=next (pointer).
+U0 BuildNode(I64 v, U0 next)
+{
+  U0 node = MAlloc(16);
+  PokeI64(node, 0, v);
+  PokePtr(node, 1, next);
+  return node;
+}
+
+U0 head = NULL;
+I64 i = 0;
+for (i = 5; i >= 1; --i) head = BuildNode(i * i, head);
+
+// Walk the list and sum the values.
+U0 cur = head;
+I64 sum = 0;
+while (cur != NULL)
+{
+  sum += PeekI64(cur, 0);
+  cur = PeekPtr(cur, 1);
+}
+"sum of squares 1..5 = %d\n", sum;
+
+// Free every node by hand - manual memory means manual cleanup.
+cur = head;
+while (cur != NULL)
+{
+  U0 next = PeekPtr(cur, 1);
+  Free(cur);
+  cur = next;
+}
+"list freed\n";

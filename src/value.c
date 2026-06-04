@@ -33,6 +33,7 @@ bool value_truthy(Value v) {
     case VAL_INT:   return AS_INT(v) != 0;
     case VAL_FLOAT: return AS_FLOAT(v) != 0.0;
     case VAL_OBJ:   return true;
+    case VAL_PTR:   return AS_PTR(v) != NULL;
     default:        return false;
   }
 }
@@ -47,6 +48,7 @@ bool value_equal(Value a, Value b) {
     case VAL_NIL:  return true;
     case VAL_BOOL: return AS_BOOL(a) == AS_BOOL(b);
     case VAL_OBJ:  return AS_OBJ(a) == AS_OBJ(b); /* strings are interned */
+    case VAL_PTR:  return AS_PTR(a) == AS_PTR(b);
     default:       return false;
   }
 }
@@ -58,6 +60,7 @@ void value_print(Value v) {
     case VAL_INT:   printf("%lld", (long long)AS_INT(v)); break;
     case VAL_FLOAT: printf("%g", AS_FLOAT(v)); break;
     case VAL_OBJ:   object_print(v); break;
+    case VAL_PTR:   printf(AS_PTR(v) != NULL ? "<ptr>" : "NULL"); break;
     default:        printf("<unknown>"); break;
   }
 }

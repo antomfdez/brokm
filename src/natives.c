@@ -1,5 +1,6 @@
 /* natives.c - the Print formatter and native registration. */
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "gc.h"
@@ -131,10 +132,130 @@ static Value native_append(int argc, Value *args) {
   return args[0];
 }
 
+/* ---- manual memory --------------------------------------------------------
+ * Raw, GC-invisible memory for low-level work. MAlloc returns a VAL_PTR that
+ * the collector never tracks or follows; it lives until Free. Access is by
+ * typed element index (PeekI64(p, i) reads the i-th 8-byte slot, etc.). These
+ * are deliberately unchecked beyond NULL - bounds and lifetime are the caller's
+ * responsibility, which is the point of manual memory. */
+
+static Value native_malloc(int argc, Value *args) {
+  if (argc < 1 || !IS_INT(args[0]) || AS_INT(args[0]) <= 0) return NIL_VAL;
+  size_t n = (size_t)AS_INT(args[0]);
+  void *p = malloc(n);
+  if (p == NULL) return NIL_VAL; /* a null pointer is represented as nil */
+  memset(p, 0, n);
+  return PTR_VAL(p);
+}
+
+static Value native_free(int argc, Value *args) {
+  if (argc >= 1 && IS_PTR(args[0])) free(AS_PTR(args[0]));
+  return NIL_VAL;
+}
+
+static bool ptr_index(int argc, Value *args, void **base, I64 *index) {
+  if (argc < 2 || !IS_PTR(args[0]) || AS_PTR(args[0]) == NULL ||
+      !IS_INT(args[1])) {
+    return false;
+  }
+  *base = AS_PTR(args[0]);
+  *index = AS_INT(args[1]);
+  return true;
+}
+
+static Value native_peek_u8(int argc, Value *args) {
+  void *base;
+  I64 i;
+  if (!ptr_index(argc, args, &base, &i)) return NIL_VAL;
+  return INT_VAL((I64)((U8 *)base)[i]);
+}
+
+static Value native_poke_u8(int argc, Value *args) {
+  void *base;
+  I64 i;
+  if (!ptr_index(argc, args, &base, &i) || argc < 3) return NIL_VAL;
+  ((U8 *)base)[i] = (U8)(IS_INT(args[2]) ? AS_INT(args[2]) : 0);
+  return args[2];
+}
+
+static Value native_peek_i64(int argc, Value *args) {
+  void *base;
+  I64 i;
+  if (!ptr_index(argc, args, &base, &i)) return NIL_VAL;
+  return INT_VAL(((I64 *)base)[i]);
+}
+
+static Value native_poke_i64(int argc, Value *args) {
+  void *base;
+  I64 i;
+  if (!ptr_index(argc, args, &base, &i) || argc < 3) return NIL_VAL;
+  ((I64 *)base)[i] = IS_INT(args[2]) ? AS_INT(args[2]) : 0;
+  return args[2];
+}
+
+static Value native_peek_f64(int argc, Value *args) {
+  void *base;
+  I64 i;
+  if (!ptr_index(argc, args, &base, &i)) return NIL_VAL;
+  return FLOAT_VAL(((F64 *)base)[i]);
+}
+
+static Value native_poke_f64(int argc, Value *args) {
+  void *base;
+  I64 i;
+  if (!ptr_index(argc, args, &base, &i) || argc < 3) return NIL_VAL;
+  ((F64 *)base)[i] = IS_NUMBER(args[2]) ? AS_F64(args[2]) : 0.0;
+  return args[2];
+}
+
+static Value native_peek_ptr(int argc, Value *args) {
+  void *base;
+  I64 i;
+  if (!ptr_index(argc, args, &base, &i)) return NIL_VAL;
+  void *loaded = ((void **)base)[i];
+  return loaded != NULL ? PTR_VAL(loaded) : NIL_VAL; /* null reads back as nil */
+}
+
+static Value native_poke_ptr(int argc, Value *args) {
+  void *base;
+  I64 i;
+  if (!ptr_index(argc, args, &base, &i) || argc < 3) return NIL_VAL;
+  ((void **)base)[i] = IS_PTR(args[2]) ? AS_PTR(args[2]) : NULL;
+  return args[2];
+}
+
+/* Bracket a section where the collector must not run (deterministic, no pauses).
+ * Allocations during the window are reclaimed once GC is re-enabled. */
+static Value native_gc_disable(int argc, Value *args) {
+  (void)argc;
+  (void)args;
+  vm.gcEnabled = false;
+  return NIL_VAL;
+}
+
+static Value native_gc_enable(int argc, Value *args) {
+  (void)argc;
+  (void)args;
+  vm.gcEnabled = true;
+  return NIL_VAL;
+}
+
 void natives_register(void) {
   vm_define_native("Print", native_print);
   vm_define_native("GcCollect", native_gc_collect);
   vm_define_native("GcMinor", native_gc_minor);
+  vm_define_native("GcDisable", native_gc_disable);
+  vm_define_native("GcEnable", native_gc_enable);
   vm_define_native("Len", native_len);
   vm_define_native("Append", native_append);
+  vm_define_native("MAlloc", native_malloc);
+  vm_define_native("Free", native_free);
+  vm_define_native("PeekU8", native_peek_u8);
+  vm_define_native("PokeU8", native_poke_u8);
+  vm_define_native("PeekI64", native_peek_i64);
+  vm_define_native("PokeI64", native_poke_i64);
+  vm_define_native("PeekF64", native_peek_f64);
+  vm_define_native("PokeF64", native_poke_f64);
+  vm_define_native("PeekPtr", native_peek_ptr);
+  vm_define_native("PokePtr", native_poke_ptr);
 }

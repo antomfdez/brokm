@@ -1,0 +1,9 @@
+// GcDisable/GcEnable bracket a section with no collection; the live result
+// still survives once the collector is re-enabled and run.
+GcDisable();
+I64 i = 0;
+U0 acc = "";
+for (i = 0; i < 3; ++i) acc = acc + "x";
+GcEnable();
+GcCollect();
+"%s ok\n", acc;

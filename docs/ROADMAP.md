@@ -30,7 +30,7 @@ Precise tri-color mark-sweep collector (`gc.c`):
   under stress, proving no live object is wrongly swept.
 - `GcCollect()` native forces a collection.
 
-## v0.3 — Generational GC ✅ (done) · manual-memory mode (deferred)
+## v0.3 — Generational GC ✅ (done)
 
 **Generational mark-sweep** (`gc.c`), non-moving:
 
@@ -71,30 +71,40 @@ or an old instance field survives only because `gc_write_barrier` recorded the e
 `tests/cases/gc_barrier.bk` (array) and `gc_field_barrier.bk` (field) prove it red/green —
 building with `-DBK_NO_WRITE_BARRIER` makes them fail; the default build keeps the values alive.
 
-## v0.3.6 — Manual-memory mode + pointers (next)
+## v0.3.6 — Manual-memory mode ✅ (done)
 
-Opt-in `MAlloc` / `Free` and region/arena allocation that bypass the collector, plus the
-pointer/`&`/`*` primitives that make them usable, for low-level, deterministic workloads.
+Raw, GC-invisible memory for low-level work:
+
+- A `VAL_PTR` value type the collector never tracks or follows, allocated with `MAlloc(nbytes)`
+  and released with `Free(ptr)` (a null pointer surfaces as `NULL`/nil).
+- Typed element access: `PeekU8/PokeU8`, `PeekI64/PokeI64`, `PeekF64/PokeF64`,
+  `PeekPtr/PokePtr` — enough to hand-build buffers and linked structures (see
+  `examples/manual.bk`).
+- `GcDisable()` / `GcEnable()` bracket no-collection sections for deterministic, pause-free code.
+
+This is the HolyC-style escape hatch: drop to manual buffers where you need control, while the
+rest of the program stays garbage-collected. Address-of-variable (`&`/`*` on managed values) is
+intentionally omitted — taking raw addresses of GC-managed values fights the collector; raw
+pointers come only from `MAlloc`. (Region/arena allocation could layer on later if needed.)
 
 ## v0.4 — Static type checking
 
-- Use the AST + HolyC type annotations (`U8`…`I64`, `F64`, `Bool`, `U0`) for real checks and
-  explicit coercions; emit typed bytecode (specialized int/float ops).
-- This also fixes the v0.1 postfix `++`/`--` and switch-scope simplifications.
+Use the AST + HolyC type annotations (`U8`…`I64`, `F64`, `Bool`, `U0`, class names) for real
+checks and explicit coercions; emit typed bytecode (specialized int/float ops). This also fixes
+the v0.1 postfix `++`/`--` and switch-scope simplifications.
 
 ## v0.5 — Baseline JIT
 
-- Compile hot functions to native code into `mmap`'d executable pages (arm64 first, then x64),
-  with a VM fallback. Profile-gated; benchmark-driven.
+Compile hot functions to native code into `mmap`'d executable pages (arm64 first, then x64),
+with a VM fallback. Profile-gated; benchmark-driven.
 
 ## v0.6 — Embedding, stdlib, polish
 
-- Richer `brokm.h`: register native functions, push/pop/convert values, multi-instance VMs.
-- A small standard library (math, strings, I/O).
-- Finalized docs and a stable language spec.
+Richer `brokm.h` (register natives, exchange values, multi-instance VMs), a small standard
+library (math, strings, I/O), and a stable language spec.
 
 ## Language features tracked across milestones
 
-- Structs / classes, pointers, arrays (with v0.3 memory work).
 - Multiple declarators per statement; command-style function calls; HolyC sub-switches.
+- Methods on classes; `&`/`*` on managed values (currently free functions + raw `MAlloc` only).
 - Modules / multi-file programs.

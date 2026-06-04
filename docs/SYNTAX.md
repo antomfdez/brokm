@@ -116,6 +116,29 @@ r.y = 99;                // ...so this also changes p.y
 - `class` and `struct` are synonyms. There are no pointers or methods yet (see
   the roadmap); behavior is written as free functions taking instances.
 
+## Manual memory (low-level)
+
+For low-level work brokm offers raw, manually managed memory that the garbage
+collector never tracks or scans. `MAlloc` returns a pointer value; you read and
+write it with typed, element-indexed peek/poke, and you must `Free` it yourself.
+
+```c
+U0 buf = MAlloc(32);          // 32 raw bytes (room for 4 x I64), zero-filled
+PokeI64(buf, 0, 42);          // write the 0th 8-byte slot
+"%d\n", PeekI64(buf, 0);      // read it back
+Free(buf);                    // manual: no GC will reclaim this
+```
+
+A null pointer (including `MAlloc` failure and a read-back null) is `NULL`, so
+`if (p != NULL)` works. Access is unchecked beyond null — bounds and lifetime
+are your responsibility; that is the point of manual memory.
+
+- `MAlloc(nbytes)` / `Free(ptr)` — allocate / release raw memory.
+- `PeekU8/PokeU8`, `PeekI64/PokeI64`, `PeekF64/PokeF64`, `PeekPtr/PokePtr` —
+  typed access by element index (e.g. `PeekI64(p, 2)` is the 3rd 8-byte slot).
+- `GcDisable()` / `GcEnable()` — bracket a section where the collector must not
+  run (deterministic, no pauses); allocations are reclaimed after re-enabling.
+
 ## Built-in functions
 
 - `Print(fmt, ...)` — same printf-style formatter as a bare string statement.
@@ -123,6 +146,7 @@ r.y = 99;                // ...so this also changes p.y
 - `Append(array, value)` — grow an array by one element; returns the array.
 - `GcCollect()` — force a full (major) garbage collection (returns nil).
 - `GcMinor()` — force a minor (young-generation) collection (returns nil).
+- Manual-memory builtins above (`MAlloc`, `Free`, peek/poke, `GcDisable/Enable`).
 
 ## Control flow
 
