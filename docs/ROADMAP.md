@@ -30,12 +30,36 @@ Precise tri-color mark-sweep collector (`gc.c`):
   under stress, proving no live object is wrongly swept.
 - `GcCollect()` native forces a collection.
 
-## v0.3 — Generational GC + manual-memory mode
+## v0.3 — Generational GC ✅ (done) · manual-memory mode (deferred)
 
-- Young copying generation + old mark-sweep; promotion on survival; a write barrier for
-  old→young references (the `gen` header field is reserved for this).
-- Opt-in **manual memory** for low-level code: `MAlloc` / `Free` and region/arena allocation
-  that bypass the collector, selectable per allocation or per scope.
+**Generational mark-sweep** (`gc.c`), non-moving:
+
+- Two generations via the `gen` header field: young (0) and old (1). Objects start young;
+  survivors of a minor collection are promoted to old.
+- `collect_garbage(major)`: a **minor** collection reclaims only young garbage and leaves old
+  objects untouched; a **major** collection is a full heap mark-sweep.
+- Triggers: minor when growth since the last minor crosses `minorThreshold` (256 KiB); major
+  when live bytes cross `nextGC`. Stress mode hammers minor every allocation + major every 4th.
+- `GcCollect()` forces a major collection; `GcMinor()` forces a minor one.
+- A **write barrier** (`gc_write_barrier`) + remembered set are in place for old→young edges.
+  They are correctly inert today: brokm has no mutable aggregate objects, so no old object is
+  ever made to point at a young one, and every young reference originates from a root that minor
+  GC already scans. They activate when arrays/structs land.
+
+**Why not a copying young space:** moving objects would require precisely updating every pointer
+(stack, frames, constants, native C-locals); with no mutable aggregates there is nothing to gain
+yet, so the non-moving design is kept.
+
+**Manual-memory mode is deferred** to follow aggregate/pointer support. `MAlloc`/`Free` and
+region/arena allocation are only meaningful once the language can hold and dereference
+pointers/arrays — without that there are no call sites to manage. The same prerequisite
+(mutable aggregates) is what makes the write barrier above non-trivial. See the milestone below.
+
+## v0.3.5 — Aggregates: arrays, structs, pointers (prerequisite unlock)
+
+Add fixed/dynamic arrays and `class`/`struct` with mutable fields, plus a pointer/reference
+notion. This unlocks two deferred pieces at once: the GC write barrier gets real call sites
+(old→young mutation), and **manual memory** (`MAlloc`/`Free`, regions) gets something to manage.
 
 ## v0.4 — Static type checking
 

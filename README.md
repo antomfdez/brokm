@@ -5,9 +5,10 @@ language with a clean [HolyC](https://en.wikipedia.org/wiki/TempleOS#HolyC)-flav
 It is built primarily for its author's own use, with four design goals: **small, fast, robust,
 and easy to embed**.
 
-This is **v0.2**: a working bytecode VM with a precise mark-sweep garbage collector. A JIT
-compiler, a generational GC, and an opt-in manual-memory mode are on the roadmap — the engine is
-structured so they slot in without rewrites (see [docs/ROADMAP.md](docs/ROADMAP.md)).
+This is **v0.3**: a working bytecode VM with a precise, **generational** mark-sweep garbage
+collector. A JIT compiler, aggregate types (arrays/structs), and an opt-in manual-memory mode are
+on the roadmap — the engine is structured so they slot in without rewrites
+(see [docs/ROADMAP.md](docs/ROADMAP.md)).
 
 ```holyc
 // hello.bk — top-level code runs; a bare string statement prints.
@@ -68,10 +69,11 @@ int main(void) {
 
 ## Status
 
-v0.2 runs real programs (arithmetic, variables, control flow, functions, recursion, string
-concatenation, printing) on a stack bytecode VM, with a precise mark-sweep garbage collector
-that reclaims heap garbage during execution. Next up: a generational GC plus an opt-in
-manual-memory mode — see the roadmap.
+v0.3 runs real programs (arithmetic, variables, control flow, functions, recursion, string
+concatenation, printing) on a stack bytecode VM, with a precise **generational** mark-sweep
+garbage collector (minor + major collections, young→old promotion) that reclaims heap garbage
+during execution. Next up: aggregate types (arrays/structs), which unlock the GC write barrier
+and the opt-in manual-memory mode — see the roadmap.
 
 ## License
 

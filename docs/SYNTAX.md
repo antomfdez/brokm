@@ -79,7 +79,8 @@ Supported specifiers: `%d %i` (integer), `%u %o %x %X` (unsigned), `%e %E %f %F 
 ## Built-in functions
 
 - `Print(fmt, ...)` — same printf-style formatter as a bare string statement.
-- `GcCollect()` — force a garbage collection (returns nil).
+- `GcCollect()` — force a full (major) garbage collection (returns nil).
+- `GcMinor()` — force a minor (young-generation) collection (returns nil).
 
 ## Control flow
 

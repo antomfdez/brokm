@@ -100,15 +100,24 @@ Value bk_format(int argc, Value *args) {
 
 static Value native_print(int argc, Value *args) { return bk_format(argc, args); }
 
-/* Force a garbage collection. Returns nil. */
+/* Force a full (major) garbage collection. Returns nil. */
 static Value native_gc_collect(int argc, Value *args) {
   (void)argc;
   (void)args;
-  collect_garbage();
+  collect_garbage(true);
+  return NIL_VAL;
+}
+
+/* Force a minor (young-generation) collection. Returns nil. */
+static Value native_gc_minor(int argc, Value *args) {
+  (void)argc;
+  (void)args;
+  collect_garbage(false);
   return NIL_VAL;
 }
 
 void natives_register(void) {
   vm_define_native("Print", native_print);
   vm_define_native("GcCollect", native_gc_collect);
+  vm_define_native("GcMinor", native_gc_minor);
 }

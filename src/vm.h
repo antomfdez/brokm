@@ -21,13 +21,18 @@ typedef struct {
   Table strings; /* interned string set (weak references) */
   Obj *objects;  /* intrusive list of every heap object */
 
-  /* Garbage collector state (v0.2). */
-  bool gcEnabled;        /* off while the compiler builds unrooted objects */
-  size_t bytesAllocated; /* live bytes tracked through reallocate() */
-  size_t nextGC;         /* collect once bytesAllocated crosses this */
+  /* Garbage collector state (v0.2 + generational in v0.3). */
+  bool gcEnabled;         /* off while the compiler builds unrooted objects */
+  size_t bytesAllocated;  /* live bytes tracked through reallocate() */
+  size_t nextGC;          /* major collection threshold */
+  size_t bytesSinceMinor; /* growth since the last minor collection */
+  size_t minorThreshold;  /* minor collection threshold */
   int grayCount;
   int grayCapacity;
   Obj **grayStack; /* worklist of marked-but-not-traced objects */
+  int rememberedCount;
+  int rememberedCapacity;
+  Obj **rememberedSet; /* old objects pointing into the young generation */
 } VM;
 
 typedef enum {

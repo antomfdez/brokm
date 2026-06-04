@@ -1,0 +1,15 @@
+// Generational churn: a long-lived global plus short-lived young allocations,
+// with collections forced mid-run. The live data must survive every collection.
+U8 keep = "anchor";
+I64 sum = 0;
+I64 i = 0;
+for (i = 1; i <= 10; ++i)
+{
+  U8 t = "x" + "y";   // young allocation, goes out of scope each iteration
+  GcMinor();          // minor collection while 'keep' and 'sum' stay live
+  sum += i;
+}
+GcCollect();          // full collection
+"%s\n", keep;
+"%d\n", sum;
+"done\n";

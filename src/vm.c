@@ -52,9 +52,14 @@ void vm_init(void) {
   vm.gcEnabled = false; /* enabled once compilation is done */
   vm.bytesAllocated = 0;
   vm.nextGC = 1 << 20;
+  vm.bytesSinceMinor = 0;
+  vm.minorThreshold = 1 << 18; /* 256 KiB */
   vm.grayCount = 0;
   vm.grayCapacity = 0;
   vm.grayStack = NULL;
+  vm.rememberedCount = 0;
+  vm.rememberedCapacity = 0;
+  vm.rememberedSet = NULL;
 
   table_init(&vm.globals);
   table_init(&vm.strings);
@@ -66,6 +71,7 @@ void vm_free(void) {
   table_free(&vm.strings);
   objects_free_all();
   free(vm.grayStack);
+  free(vm.rememberedSet);
 }
 
 void vm_define_native(const char *name, NativeFn fn) {
