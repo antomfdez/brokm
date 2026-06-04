@@ -32,7 +32,11 @@ static ObjString *allocate_string(char *chars, int length, U32 hash) {
   string->length = length;
   string->chars = chars;
   string->hash = hash;
+  /* table_set may grow the table and trigger a collection; keep the new string
+   * reachable on the stack across that window. */
+  vm_push(OBJ_VAL(string));
   table_set(&vm.strings, string, NIL_VAL);
+  vm_pop();
   return string;
 }
 
@@ -90,7 +94,7 @@ void object_print(Value v) {
   }
 }
 
-static void free_object(Obj *obj) {
+void object_free(Obj *obj) {
   switch (obj->type) {
     case OBJ_STRING: {
       ObjString *s = (ObjString *)obj;
@@ -116,7 +120,7 @@ void objects_free_all(void) {
   Obj *obj = vm.objects;
   while (obj != NULL) {
     Obj *next = obj->next;
-    free_object(obj);
+    object_free(obj);
     obj = next;
   }
   vm.objects = NULL;

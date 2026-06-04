@@ -66,6 +66,7 @@ ObjFunction *function_new(void);
 ObjNative *native_new(NativeFn fn, ObjString *name);
 
 void object_print(Value v);
-void objects_free_all(void);
+void object_free(Obj *obj);  /* free one object (used by the GC sweep) */
+void objects_free_all(void); /* free every object (shutdown) */
 
 #endif /* BROKM_OBJECT_H */

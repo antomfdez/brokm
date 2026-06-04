@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "gc.h"
 #include "natives.h"
 #include "object.h"
 #include "vm.h"
@@ -99,4 +100,15 @@ Value bk_format(int argc, Value *args) {
 
 static Value native_print(int argc, Value *args) { return bk_format(argc, args); }
 
-void natives_register(void) { vm_define_native("Print", native_print); }
+/* Force a garbage collection. Returns nil. */
+static Value native_gc_collect(int argc, Value *args) {
+  (void)argc;
+  (void)args;
+  collect_garbage();
+  return NIL_VAL;
+}
+
+void natives_register(void) {
+  vm_define_native("Print", native_print);
+  vm_define_native("GcCollect", native_gc_collect);
+}

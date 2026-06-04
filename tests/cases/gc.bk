@@ -1,0 +1,19 @@
+// Runtime allocation: string concatenation creates heap garbage that the
+// collector must reclaim without freeing anything still in use.
+U8 a = "Hello";
+U8 b = ", ";
+U8 c = "World";
+U8 msg = a + b + c + "!";
+"%s\n", msg;
+
+// Build a string in a loop, forcing a collection partway through. The live
+// accumulator must survive every collection.
+I64 i = 0;
+U8 acc = "";
+for (i = 0; i < 5; ++i)
+{
+  acc = acc + "ab";
+  GcCollect();
+}
+"%s\n", acc;
+"survived gc\n";

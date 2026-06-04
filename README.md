@@ -5,9 +5,9 @@ language with a clean [HolyC](https://en.wikipedia.org/wiki/TempleOS#HolyC)-flav
 It is built primarily for its author's own use, with four design goals: **small, fast, robust,
 and easy to embed**.
 
-This is **v0.1**: a working bytecode VM. A JIT compiler, a generational garbage collector, and
-an opt-in manual-memory mode are on the roadmap — the engine is structured so they slot in
-without rewrites (see [docs/ROADMAP.md](docs/ROADMAP.md)).
+This is **v0.2**: a working bytecode VM with a precise mark-sweep garbage collector. A JIT
+compiler, a generational GC, and an opt-in manual-memory mode are on the roadmap — the engine is
+structured so they slot in without rewrites (see [docs/ROADMAP.md](docs/ROADMAP.md)).
 
 ```holyc
 // hello.bk — top-level code runs; a bare string statement prints.
@@ -33,6 +33,7 @@ make              # builds ./brokm  (-std=c99 -Wall -Wextra, 0 warnings)
 ./brokm file.bk   # run a program
 ./brokm           # start the REPL
 make test         # run the golden test suite
+make test-gc      # run the suite with the GC firing on every allocation
 make debug        # ASan/UBSan + bytecode/exec tracing build
 ```
 
@@ -67,9 +68,10 @@ int main(void) {
 
 ## Status
 
-v0.1 runs real programs (arithmetic, variables, control flow, functions, recursion, printing)
-on a stack bytecode VM. It is **not** yet garbage-collected — heap objects are freed at exit via
-an intrusive list. See the roadmap for what comes next.
+v0.2 runs real programs (arithmetic, variables, control flow, functions, recursion, string
+concatenation, printing) on a stack bytecode VM, with a precise mark-sweep garbage collector
+that reclaims heap garbage during execution. Next up: a generational GC plus an opt-in
+manual-memory mode — see the roadmap.
 
 ## License
 

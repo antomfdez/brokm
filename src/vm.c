@@ -1,9 +1,11 @@
 /* vm.c - bytecode interpreter: the heart of brokm v0.1. */
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "compiler.h"
+#include "memory.h"
 #include "natives.h"
 #include "object.h"
 #include "parser.h"
@@ -46,6 +48,14 @@ static Value peek(int distance) { return vm.stackTop[-1 - distance]; }
 void vm_init(void) {
   reset_stack();
   vm.objects = NULL;
+
+  vm.gcEnabled = false; /* enabled once compilation is done */
+  vm.bytesAllocated = 0;
+  vm.nextGC = 1 << 20;
+  vm.grayCount = 0;
+  vm.grayCapacity = 0;
+  vm.grayStack = NULL;
+
   table_init(&vm.globals);
   table_init(&vm.strings);
   natives_register();
@@ -55,6 +65,7 @@ void vm_free(void) {
   table_free(&vm.globals);
   table_free(&vm.strings);
   objects_free_all();
+  free(vm.grayStack);
 }
 
 void vm_define_native(const char *name, NativeFn fn) {
@@ -172,6 +183,22 @@ static ArStatus apply_binary(U8 op, Value a, Value b, Value *out) {
   }
 }
 
+/* Build a + b for two strings. The operands stay on the stack (peeked, not
+ * popped) so the collector keeps them alive across the allocation. */
+static void concatenate(void) {
+  ObjString *b = AS_STRING(peek(0));
+  ObjString *a = AS_STRING(peek(1));
+  int length = a->length + b->length;
+  char *chars = ALLOCATE(char, length + 1);
+  memcpy(chars, a->chars, (size_t)a->length);
+  memcpy(chars + a->length, b->chars, (size_t)b->length);
+  chars[length] = '\0';
+  ObjString *result = string_take(chars, length);
+  vm_pop();
+  vm_pop();
+  vm_push(OBJ_VAL(result));
+}
+
 static bool do_binary(U8 op) {
   Value b = vm_pop();
   Value a = vm_pop();
@@ -276,7 +303,13 @@ static InterpretResult run(void) {
       case OP_GREATER_EQUAL: BINARY(OP_GREATER_EQUAL); break;
       case OP_LESS: BINARY(OP_LESS); break;
       case OP_LESS_EQUAL: BINARY(OP_LESS_EQUAL); break;
-      case OP_ADD: BINARY(OP_ADD); break;
+      case OP_ADD:
+        if (IS_STRING(peek(0)) && IS_STRING(peek(1))) {
+          concatenate();
+        } else if (!do_binary(OP_ADD)) {
+          return BK_RUNTIME_ERROR;
+        }
+        break;
       case OP_SUB: BINARY(OP_SUB); break;
       case OP_MUL: BINARY(OP_MUL); break;
       case OP_DIV: BINARY(OP_DIV); break;
@@ -368,6 +401,11 @@ static InterpretResult run(void) {
 }
 
 InterpretResult vm_interpret(const char *source) {
+  /* Parsing and compilation allocate objects (interned names, functions,
+   * constants) that are not yet reachable from VM roots, so collection stays
+   * off until the script is built and pushed. */
+  vm.gcEnabled = false;
+
   StmtList program;
   bool ok = parse(source, &program);
   if (!ok) {
@@ -381,5 +419,7 @@ InterpretResult vm_interpret(const char *source) {
 
   vm_push(OBJ_VAL(script));
   call_function(script, 0);
+
+  vm.gcEnabled = true; /* the script and its constants are now rooted */
   return run();
 }

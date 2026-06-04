@@ -18,8 +18,16 @@ typedef struct {
   Value stack[BK_STACK_MAX];
   Value *stackTop;
   Table globals;
-  Table strings; /* interned string set */
+  Table strings; /* interned string set (weak references) */
   Obj *objects;  /* intrusive list of every heap object */
+
+  /* Garbage collector state (v0.2). */
+  bool gcEnabled;        /* off while the compiler builds unrooted objects */
+  size_t bytesAllocated; /* live bytes tracked through reallocate() */
+  size_t nextGC;         /* collect once bytesAllocated crosses this */
+  int grayCount;
+  int grayCapacity;
+  Obj **grayStack; /* worklist of marked-but-not-traced objects */
 } VM;
 
 typedef enum {

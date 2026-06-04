@@ -12,12 +12,23 @@ No GC yet — heap objects are freed at exit via the intrusive object list. Obje
 the `reallocate()` chokepoint, the AST seam, and macro-based `Value` access are all in place
 for what follows.
 
-## v0.2 — Garbage collection: mark-sweep
+## v0.2 — Garbage collection: mark-sweep ✅ (done)
 
-- Trigger collection inside `reallocate()` (with a growth heuristic).
-- Mark roots: value stack, call frames, globals, interned strings.
-- Sweep the intrusive object list; reclaim unreachable objects.
-- `-DBK_DEBUG_STRESS_GC` mode that collects on every allocation to shake out bugs.
+Precise tri-color mark-sweep collector (`gc.c`):
+
+- Collection is triggered inside `reallocate()` via a `bytesAllocated`/`nextGC`
+  growth heuristic (grow factor 2, 1 MiB floor).
+- Roots: value stack, call frames, and the globals table. The interned-string
+  table is a **weak** set, pruned before sweep.
+- Marking blackens function constants/names and native names; sweep walks the
+  intrusive object list and frees the white objects.
+- Collection is gated by `vm.gcEnabled` so it never runs during compilation,
+  when the compiler holds objects not yet reachable from VM roots.
+- Runtime allocation to exercise it: **string concatenation** (`"a" + "b"`).
+- `make test-gc` runs the whole suite with `-DBK_DEBUG_STRESS_GC` (collect on
+  every allocation); `-DBK_DEBUG_LOG_GC` logs each collection. All tests pass
+  under stress, proving no live object is wrongly swept.
+- `GcCollect()` native forces a collection.
 
 ## v0.3 — Generational GC + manual-memory mode
 

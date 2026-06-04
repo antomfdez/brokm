@@ -26,5 +26,12 @@ debug: clean $(BIN)
 test: $(BIN)
 	@bash tests/run_tests.sh
 
+# Run the whole suite with the collector firing on every allocation. If marking
+# is wrong, a live object gets swept and a test crashes or misbehaves.
+test-gc: clean
+	$(CC) $(CFLAGS) -DBK_DEBUG_STRESS_GC -o $(BIN) $(SRC) $(LDFLAGS)
+	@bash tests/run_tests.sh
+	@$(MAKE) --no-print-directory clean
+
 clean:
 	rm -f $(OBJ) $(BIN)

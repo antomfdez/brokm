@@ -76,6 +76,11 @@ Supported specifiers: `%d %i` (integer), `%u %o %x %X` (unsigned), `%e %E %f %F 
 (float), `%c` (char), `%s` (string), `%%`. Width/precision/flags pass through, e.g. `%5.2f`.
 `Print(...)` is the same formatter as a named native.
 
+## Built-in functions
+
+- `Print(fmt, ...)` — same printf-style formatter as a bare string statement.
+- `GcCollect()` — force a garbage collection (returns nil).
+
 ## Control flow
 
 ```c
@@ -104,6 +109,7 @@ return expr;
 | Category    | Operators |
 |-------------|-----------|
 | Arithmetic  | `+ - * / %` (integer `/` truncates; `%` is integer-only) |
+| Strings     | `+` concatenates two strings (`"a" + "b"` → `"ab"`) |
 | Comparison  | `== != < <= > >=` |
 | Logical     | `&& || !` (short-circuit) |
 | Bitwise     | `& | ^ ~ << >>` (integer-only) |
