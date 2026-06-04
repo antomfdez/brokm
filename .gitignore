@@ -1,0 +1,12 @@
+# Build artifacts
+/brokm
+src/*.o
+*.o
+
+# Debug / sanitizer output
+*.dSYM/
+*.out
+
+# Editor / OS cruft
+.DS_Store
+*.swp

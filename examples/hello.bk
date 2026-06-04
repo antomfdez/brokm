@@ -1,0 +1,2 @@
+// The traditional greeting, the HolyC way: a bare string statement prints.
+"Hello World\n";

@@ -1,0 +1,34 @@
+// Control flow: while, for, do-while, break/continue, and switch.
+I64 sum = 0;
+I64 i = 1;
+while (i <= 5)
+{
+  sum += i;
+  ++i;
+}
+"sum 1..5 = %d\n", sum;
+
+// FizzBuzz-ish with continue + switch.
+for (i = 1; i <= 5; ++i)
+{
+  if (i == 3) continue;
+  switch (i)
+  {
+    case 1:
+      "one\n";
+      break;
+    case 5:
+      "five\n";
+      break;
+    default:
+      "other %d\n", i;
+      break;
+  }
+}
+
+I64 n = 3;
+do
+{
+  "countdown %d\n", n;
+  --n;
+} while (n > 0);

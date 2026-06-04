@@ -1,0 +1,5 @@
+I64 Add(I64 a, I64 b) { return a + b; }
+I64 Square(I64 x) { return x * x; }
+"%d\n", Add(3, 4);
+"%d\n", Square(5);
+"%d\n", Add(Square(2), Square(3));

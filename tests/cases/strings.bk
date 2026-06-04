@@ -1,0 +1,4 @@
+U8 name = "brokm";
+"Hello, %s!\n", name;
+"%d %d %d\n", 1, 2, 3;
+"literal percent %%\n";
