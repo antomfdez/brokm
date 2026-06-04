@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "compiler.h"
+#include "gc.h"
 #include "memory.h"
 #include "natives.h"
 #include "object.h"
@@ -382,6 +383,61 @@ static InterpretResult run(void) {
         int argCount = READ_BYTE();
         bk_format(argCount, vm.stackTop - argCount);
         vm.stackTop -= argCount;
+        break;
+      }
+      case OP_ARRAY: {
+        int n = READ_BYTE();
+        ObjArray *array = array_new();
+        vm_push(OBJ_VAL(array)); /* keep reachable while appending */
+        Value *base = vm.stackTop - n - 1;
+        for (int i = 0; i < n; i++) array_append(array, base[i]);
+        vm.stackTop = base; /* drop the n elements and the temp array slot */
+        vm_push(OBJ_VAL(array));
+        break;
+      }
+      case OP_INDEX_GET: {
+        Value indexVal = vm_pop();
+        Value arrayVal = vm_pop();
+        if (!IS_ARRAY(arrayVal)) {
+          runtime_error("Can only index arrays.");
+          return BK_RUNTIME_ERROR;
+        }
+        if (!IS_INT(indexVal)) {
+          runtime_error("Array index must be an integer.");
+          return BK_RUNTIME_ERROR;
+        }
+        ObjArray *array = AS_ARRAY(arrayVal);
+        I64 i = AS_INT(indexVal);
+        if (i < 0 || i >= array->elements.count) {
+          runtime_error("Array index %lld out of bounds (length %d).",
+                        (long long)i, array->elements.count);
+          return BK_RUNTIME_ERROR;
+        }
+        vm_push(array->elements.values[i]);
+        break;
+      }
+      case OP_INDEX_SET: {
+        Value value = vm_pop();
+        Value indexVal = vm_pop();
+        Value arrayVal = vm_pop();
+        if (!IS_ARRAY(arrayVal)) {
+          runtime_error("Can only index arrays.");
+          return BK_RUNTIME_ERROR;
+        }
+        if (!IS_INT(indexVal)) {
+          runtime_error("Array index must be an integer.");
+          return BK_RUNTIME_ERROR;
+        }
+        ObjArray *array = AS_ARRAY(arrayVal);
+        I64 i = AS_INT(indexVal);
+        if (i < 0 || i >= array->elements.count) {
+          runtime_error("Array index %lld out of bounds (length %d).",
+                        (long long)i, array->elements.count);
+          return BK_RUNTIME_ERROR;
+        }
+        array->elements.values[i] = value;
+        gc_write_barrier((Obj *)array, value); /* may be old->young */
+        vm_push(value);
         break;
       }
       case OP_RETURN: {

@@ -106,6 +106,22 @@ void free_expr(Expr *expr) {
       }
       FREE_ARRAY(Expr *, expr->as.call.args.items, expr->as.call.args.capacity);
       break;
+    case EXPR_ARRAY:
+      for (int i = 0; i < expr->as.array.elements.count; i++) {
+        free_expr(expr->as.array.elements.items[i]);
+      }
+      FREE_ARRAY(Expr *, expr->as.array.elements.items,
+                 expr->as.array.elements.capacity);
+      break;
+    case EXPR_INDEX:
+      free_expr(expr->as.index.object);
+      free_expr(expr->as.index.index);
+      break;
+    case EXPR_INDEX_SET:
+      free_expr(expr->as.index_set.object);
+      free_expr(expr->as.index_set.index);
+      free_expr(expr->as.index_set.value);
+      break;
   }
   FREE(Expr, expr);
 }

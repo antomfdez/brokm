@@ -41,6 +41,9 @@ typedef enum {
   OP_LOOP,           /* operand: 16-bit backward offset */
   OP_CALL,           /* operand: argument count */
   OP_PRINT,          /* operand: argument count (format + args) */
+  OP_ARRAY,          /* operand: element count */
+  OP_INDEX_GET,
+  OP_INDEX_SET,
   OP_RETURN
 } OpCode;
 

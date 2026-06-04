@@ -38,7 +38,10 @@ typedef enum {
   EXPR_BINARY,
   EXPR_LOGICAL,
   EXPR_ASSIGN,
-  EXPR_CALL
+  EXPR_CALL,
+  EXPR_ARRAY,      /* [a, b, c] */
+  EXPR_INDEX,      /* obj[index] */
+  EXPR_INDEX_SET   /* obj[index] = value */
 } ExprKind;
 
 struct Expr {
@@ -52,6 +55,9 @@ struct Expr {
     struct { TokenType op; Expr *left; Expr *right; } logical;
     struct { ObjString *name; Expr *value; } assign;
     struct { Expr *callee; ExprList args; } call;
+    struct { ExprList elements; } array;
+    struct { Expr *object; Expr *index; } index;
+    struct { Expr *object; Expr *index; Expr *value; } index_set;
   } as;
 };
 

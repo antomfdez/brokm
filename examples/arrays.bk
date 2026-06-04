@@ -1,0 +1,21 @@
+// Dynamic arrays: literals, indexing, growth, and nesting.
+I64[] xs = [1, 2, 3];
+Append(xs, 4);
+Append(xs, 5);
+
+I64 i = 0;
+I64 total = 0;
+for (i = 0; i < Len(xs); ++i)
+{
+  total += xs[i];
+  xs[i] = xs[i] * xs[i];   // square each element in place
+}
+"squares: %d %d %d %d %d\n", xs[0], xs[1], xs[2], xs[3], xs[4];
+"sum of 1..5 = %d\n", total;
+
+// Arrays hold any value, including other arrays and strings.
+U0[] grid = [[1, 0], [0, 1]];
+"identity[0][0]=%d identity[1][0]=%d\n", grid[0][0], grid[1][0];
+
+U0[] names = ["ada", "linus", "terry"];
+for (i = 0; i < Len(names); ++i) "%s\n", names[i];

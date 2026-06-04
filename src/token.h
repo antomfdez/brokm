@@ -5,6 +5,7 @@
 typedef enum {
   /* punctuation */
   TOKEN_LPAREN, TOKEN_RPAREN, TOKEN_LBRACE, TOKEN_RBRACE,
+  TOKEN_LBRACKET, TOKEN_RBRACKET,
   TOKEN_COMMA, TOKEN_SEMICOLON, TOKEN_COLON,
 
   /* arithmetic / assignment */

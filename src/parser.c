@@ -316,6 +316,37 @@ static Expr *postfix(bool canAssign, Expr *left) {
   return make_assign(name, make_binary(base, left, one, line), line);
 }
 
+static Expr *array_literal(bool canAssign) {
+  (void)canAssign;
+  int line = parser.previous.line;
+  Expr *e = expr_new(EXPR_ARRAY, line);
+  exprlist_init(&e->as.array.elements);
+  if (!check(TOKEN_RBRACKET)) {
+    do {
+      exprlist_write(&e->as.array.elements, expression());
+    } while (match(TOKEN_COMMA));
+  }
+  consume(TOKEN_RBRACKET, "Expect ']' after array elements.");
+  return e;
+}
+
+static Expr *index_expr(bool canAssign, Expr *left) {
+  int line = parser.previous.line;
+  Expr *idx = expression();
+  consume(TOKEN_RBRACKET, "Expect ']' after index.");
+  if (canAssign && match(TOKEN_EQ)) {
+    Expr *e = expr_new(EXPR_INDEX_SET, line);
+    e->as.index_set.object = left;
+    e->as.index_set.index = idx;
+    e->as.index_set.value = expression();
+    return e;
+  }
+  Expr *e = expr_new(EXPR_INDEX, line);
+  e->as.index.object = left;
+  e->as.index.index = idx;
+  return e;
+}
+
 static Expr *call(bool canAssign, Expr *left) {
   (void)canAssign;
   int line = parser.previous.line;
@@ -333,6 +364,7 @@ static Expr *call(bool canAssign, Expr *left) {
 
 static const ParseRule rules[] = {
     [TOKEN_LPAREN] = {grouping, call, PREC_CALL},
+    [TOKEN_LBRACKET] = {array_literal, index_expr, PREC_CALL},
     [TOKEN_MINUS] = {unary, binary, PREC_TERM},
     [TOKEN_PLUS] = {NULL, binary, PREC_TERM},
     [TOKEN_STAR] = {NULL, binary, PREC_FACTOR},
@@ -450,6 +482,9 @@ static Stmt *function_declaration(Token nameTok) {
   if (!check(TOKEN_RPAREN)) {
     do {
       consume(TOKEN_TYPE, "Expect parameter type.");
+      if (match(TOKEN_LBRACKET)) {
+        consume(TOKEN_RBRACKET, "Expect ']' in array type.");
+      }
       consume(TOKEN_IDENTIFIER, "Expect parameter name.");
       namelist_write(&s->as.func.params, intern_token(parser.previous));
     } while (match(TOKEN_COMMA));
@@ -463,6 +498,7 @@ static Stmt *function_declaration(Token nameTok) {
 /* A declaration begins with a type keyword; `<type> name (` is a function,
  * otherwise it is a variable. */
 static Stmt *typed_declaration(void) {
+  if (match(TOKEN_LBRACKET)) consume(TOKEN_RBRACKET, "Expect ']' in array type.");
   consume(TOKEN_IDENTIFIER, "Expect name after type.");
   Token nameTok = parser.previous;
   if (check(TOKEN_LPAREN)) return function_declaration(nameTok);

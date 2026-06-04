@@ -1,0 +1,10 @@
+// Write-barrier exercise. A minor collection skips the old generation, so a
+// young value reachable only through an old object survives ONLY if the write
+// barrier recorded that old->young edge. (Compile with -DBK_NO_WRITE_BARRIER
+// to see this fail.)
+U0[] box = [0];
+GcMinor();             // box (a global root) is promoted to the old generation
+box[0] = "ba" + "rk";  // young string stored into the now-old array
+GcMinor();             // minor skips old box; barrier keeps "bark" alive
+GcMinor();
+"%s\n", box[0];

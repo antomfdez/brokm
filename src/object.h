@@ -13,7 +13,8 @@
 typedef enum {
   OBJ_STRING,
   OBJ_FUNCTION,
-  OBJ_NATIVE
+  OBJ_NATIVE,
+  OBJ_ARRAY
 } ObjType;
 
 struct Obj {
@@ -45,14 +46,21 @@ typedef struct {
   ObjString *name;
 } ObjNative;
 
+typedef struct {
+  Obj obj;
+  ValueArray elements;
+} ObjArray;
+
 #define OBJ_TYPE(v)    (AS_OBJ(v)->type)
 #define IS_STRING(v)   object_is_type(v, OBJ_STRING)
 #define IS_FUNCTION(v) object_is_type(v, OBJ_FUNCTION)
 #define IS_NATIVE(v)   object_is_type(v, OBJ_NATIVE)
+#define IS_ARRAY(v)    object_is_type(v, OBJ_ARRAY)
 #define AS_STRING(v)   ((ObjString *)AS_OBJ(v))
 #define AS_CSTRING(v)  (((ObjString *)AS_OBJ(v))->chars)
 #define AS_FUNCTION(v) ((ObjFunction *)AS_OBJ(v))
 #define AS_NATIVE(v)   ((ObjNative *)AS_OBJ(v))
+#define AS_ARRAY(v)    ((ObjArray *)AS_OBJ(v))
 
 static inline bool object_is_type(Value v, ObjType type) {
   return IS_OBJ(v) && AS_OBJ(v)->type == type;
@@ -64,6 +72,8 @@ ObjString *string_take(char *chars, int length);
 ObjString *string_copy(const char *chars, int length);
 ObjFunction *function_new(void);
 ObjNative *native_new(NativeFn fn, ObjString *name);
+ObjArray *array_new(void);
+void array_append(ObjArray *array, Value value); /* applies the GC write barrier */
 
 void object_print(Value v);
 void object_free(Obj *obj);  /* free one object (used by the GC sweep) */

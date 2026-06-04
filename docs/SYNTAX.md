@@ -76,9 +76,28 @@ Supported specifiers: `%d %i` (integer), `%u %o %x %X` (unsigned), `%e %E %f %F 
 (float), `%c` (char), `%s` (string), `%%`. Width/precision/flags pass through, e.g. `%5.2f`.
 `Print(...)` is the same formatter as a named native.
 
+## Arrays
+
+Dynamic, heap-allocated, holding any mix of values (including other arrays):
+
+```c
+I64[] a = [10, 20, 30];   // literal; the [] in the type is optional decoration
+a[1] = 25;                // index assignment
+"%d\n", a[0];             // index read
+Append(a, 40);            // grow by one element
+"%d\n", Len(a);           // 4
+U0[] grid = [[1, 0], [0, 1]];
+"%d\n", grid[1][1];       // nesting
+```
+
+Indices are integers; out-of-bounds access and indexing a non-array are runtime
+errors.
+
 ## Built-in functions
 
 - `Print(fmt, ...)` — same printf-style formatter as a bare string statement.
+- `Len(x)` — element count of an array, or character count of a string.
+- `Append(array, value)` — grow an array by one element; returns the array.
 - `GcCollect()` — force a full (major) garbage collection (returns nil).
 - `GcMinor()` — force a minor (young-generation) collection (returns nil).
 

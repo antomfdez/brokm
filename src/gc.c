@@ -1,4 +1,10 @@
-/* gc.c - the generational mark-sweep collector. */
+/* gc.c - the generational mark-sweep collector.
+ *
+ * A minor collection scans only the young generation: mark_object() ignores old
+ * objects entirely, and the only way a young object reachable solely through an
+ * old one stays alive is the remembered set, populated by gc_write_barrier().
+ * This is what makes the barrier load-bearing (see the red/green test). A major
+ * collection marks across both generations. */
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -8,15 +14,18 @@
 #include "vm.h"
 
 #define GC_HEAP_GROW_FACTOR 2
-#define GC_HEAP_MIN (1 << 20)  /* major threshold floor: 1 MiB */
+#define GC_HEAP_MIN (1 << 20) /* major threshold floor: 1 MiB */
 
 #define GEN_YOUNG 0
 #define GEN_OLD 1
+
+static bool gc_major = false; /* mode of the collection in progress */
 
 /* ---- gray worklist (raw alloc; never re-enters the collector) ---------- */
 
 void mark_object(Obj *object) {
   if (object == NULL || object->mark) return;
+  if (!gc_major && object->gen == GEN_OLD) return; /* minor: old gen is opaque */
   object->mark = 1;
   if (vm.grayCapacity < vm.grayCount + 1) {
     vm.grayCapacity = vm.grayCapacity < 8 ? 8 : vm.grayCapacity * 2;
@@ -37,6 +46,7 @@ void mark_value(Value value) {
 /* ---- remembered set (old -> young edges) ------------------------------- */
 
 void gc_write_barrier(Obj *owner, Value value) {
+#ifndef BK_NO_WRITE_BARRIER
   if (owner == NULL || owner->gen != GEN_OLD) return;
   if (!IS_OBJ(value) || AS_OBJ(value)->gen != GEN_YOUNG) return;
 
@@ -51,19 +61,13 @@ void gc_write_barrier(Obj *owner, Value value) {
     }
   }
   vm.rememberedSet[vm.rememberedCount++] = owner;
+#else
+  (void)owner;
+  (void)value;
+#endif
 }
 
 /* ---- marking ----------------------------------------------------------- */
-
-static void mark_table(Table *table) {
-  for (int i = 0; i < table->capacity; i++) {
-    Entry *entry = &table->entries[i];
-    if (entry->key != NULL) {
-      mark_object((Obj *)entry->key);
-      mark_value(entry->value);
-    }
-  }
-}
 
 static void blacken_object(Obj *object) {
   switch (object->type) {
@@ -78,22 +82,41 @@ static void blacken_object(Obj *object) {
     case OBJ_NATIVE:
       mark_object((Obj *)((ObjNative *)object)->name);
       break;
+    case OBJ_ARRAY: {
+      ObjArray *array = (ObjArray *)object;
+      for (int i = 0; i < array->elements.count; i++) {
+        mark_value(array->elements.values[i]);
+      }
+      break;
+    }
     case OBJ_STRING:
       break;
   }
 }
 
-static void mark_roots(bool major) {
+static void mark_table(Table *table) {
+  for (int i = 0; i < table->capacity; i++) {
+    Entry *entry = &table->entries[i];
+    if (entry->key != NULL) {
+      mark_object((Obj *)entry->key);
+      mark_value(entry->value);
+    }
+  }
+}
+
+static void mark_roots(void) {
   for (Value *slot = vm.stack; slot < vm.stackTop; slot++) mark_value(*slot);
   for (int i = 0; i < vm.frameCount; i++) {
     mark_object((Obj *)vm.frames[i].function);
   }
   mark_table(&vm.globals);
 
-  /* For a minor collection, old objects are not otherwise scanned, so any old
-   * object recorded as pointing into the young generation acts as a root. */
-  if (!major) {
-    for (int i = 0; i < vm.rememberedCount; i++) mark_object(vm.rememberedSet[i]);
+  /* For a minor collection, old objects are not scanned, so old objects known
+   * to hold young references must be scanned for their young children. */
+  if (!gc_major) {
+    for (int i = 0; i < vm.rememberedCount; i++) {
+      blacken_object(vm.rememberedSet[i]);
+    }
   }
 }
 
@@ -106,32 +129,31 @@ static void trace_references(void) {
 
 /* Drop weak intern-table entries about to be swept: any unmarked string in a
  * major collection, or any unmarked *young* string in a minor collection. */
-static void table_remove_white(Table *table, bool major) {
+static void table_remove_white(Table *table) {
   for (int i = 0; i < table->capacity; i++) {
     Entry *entry = &table->entries[i];
     if (entry->key == NULL) continue;
     Obj *key = (Obj *)entry->key;
     if (key->mark) continue;
-    if (major || key->gen == GEN_YOUNG) table_delete(table, entry->key);
+    if (gc_major || key->gen == GEN_YOUNG) table_delete(table, entry->key);
   }
 }
 
 /* ---- sweep ------------------------------------------------------------- */
 
-static void sweep(bool major) {
+static void sweep(void) {
   Obj **link = &vm.objects;
   while (*link != NULL) {
     Obj *object = *link;
     if (object->mark) {
       object->mark = 0;
-      if (!major && object->gen == GEN_YOUNG) object->gen = GEN_OLD; /* promote */
+      if (!gc_major && object->gen == GEN_YOUNG) object->gen = GEN_OLD; /* promote */
       link = &object->next;
-    } else if (major || object->gen == GEN_YOUNG) {
+    } else if (gc_major || object->gen == GEN_YOUNG) {
       *link = object->next;
       object_free(object);
     } else {
-      /* surviving old object during a minor collection: leave it, reset mark */
-      object->mark = 0;
+      /* surviving old object during a minor collection */
       link = &object->next;
     }
   }
@@ -141,20 +163,21 @@ static void sweep(bool major) {
 
 void collect_garbage(bool major) {
   if (!vm.gcEnabled) return;
+  gc_major = major;
 
 #ifdef BK_DEBUG_LOG_GC
   printf("-- gc begin (%s)\n", major ? "major" : "minor");
   size_t before = vm.bytesAllocated;
 #endif
 
-  mark_roots(major);
+  mark_roots();
   trace_references();
-  table_remove_white(&vm.strings, major);
-  sweep(major);
+  table_remove_white(&vm.strings);
+  sweep();
 
-  /* After a minor collection the surviving young objects were promoted, so any
-   * recorded old->young edges are now old->old; the set can be cleared. */
-  vm.rememberedCount = 0;
+  /* Only a minor collection promotes its young survivors, dissolving the
+   * recorded old->young edges into old->old; a major leaves the set intact. */
+  if (!major) vm.rememberedCount = 0;
   vm.bytesSinceMinor = 0;
 
   if (major) {

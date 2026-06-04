@@ -196,6 +196,8 @@ Token lexer_next(void) {
     case ')': return make_token(TOKEN_RPAREN);
     case '{': return make_token(TOKEN_LBRACE);
     case '}': return make_token(TOKEN_RBRACE);
+    case '[': return make_token(TOKEN_LBRACKET);
+    case ']': return make_token(TOKEN_RBRACKET);
     case ',': return make_token(TOKEN_COMMA);
     case ';': return make_token(TOKEN_SEMICOLON);
     case ':': return make_token(TOKEN_COLON);

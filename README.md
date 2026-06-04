@@ -46,6 +46,7 @@ make debug        # ASan/UBSan + bytecode/exec tracing build
 - **Functions**: `I64 Add(I64 a, I64 b) { return a + b; }`
 - **Printing**: a bare string statement prints, with printf-style args:
   `"x = %d\n", x;` — or call `Print(...)`.
+- **Arrays**: dynamic, heap-allocated — `I64[] a = [1, 2, 3]; a[0] = 9;` with `Len`/`Append`.
 - **Control flow**: `if/else`, `while`, `for`, `do/while`, `switch/case/default`,
   `break`, `continue`, `return`.
 - **Operators**: `+ - * / %`, comparisons, `&& || !`, bitwise `& | ^ ~ << >>`,
@@ -69,11 +70,11 @@ int main(void) {
 
 ## Status
 
-v0.3 runs real programs (arithmetic, variables, control flow, functions, recursion, string
-concatenation, printing) on a stack bytecode VM, with a precise **generational** mark-sweep
-garbage collector (minor + major collections, young→old promotion) that reclaims heap garbage
-during execution. Next up: aggregate types (arrays/structs), which unlock the GC write barrier
-and the opt-in manual-memory mode — see the roadmap.
+v0.3.5 runs real programs (arithmetic, variables, control flow, functions, recursion, strings,
+**dynamic arrays**, printing) on a stack bytecode VM, with a precise **generational** mark-sweep
+collector (minor + major, young→old promotion) whose write barrier is exercised by array
+mutation and verified red/green. Next up: structs/pointers, which then unlock the opt-in
+manual-memory mode — see the roadmap.
 
 ## License
 

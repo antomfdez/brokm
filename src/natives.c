@@ -116,8 +116,25 @@ static Value native_gc_minor(int argc, Value *args) {
   return NIL_VAL;
 }
 
+/* Len(x) - element count of an array, or character count of a string. */
+static Value native_len(int argc, Value *args) {
+  if (argc < 1) return INT_VAL(0);
+  if (IS_ARRAY(args[0])) return INT_VAL(AS_ARRAY(args[0])->elements.count);
+  if (IS_STRING(args[0])) return INT_VAL(AS_STRING(args[0])->length);
+  return INT_VAL(0);
+}
+
+/* Append(array, value) - grow the array by one element; returns the array. */
+static Value native_append(int argc, Value *args) {
+  if (argc < 2 || !IS_ARRAY(args[0])) return NIL_VAL;
+  array_append(AS_ARRAY(args[0]), args[1]);
+  return args[0];
+}
+
 void natives_register(void) {
   vm_define_native("Print", native_print);
   vm_define_native("GcCollect", native_gc_collect);
   vm_define_native("GcMinor", native_gc_minor);
+  vm_define_native("Len", native_len);
+  vm_define_native("Append", native_append);
 }

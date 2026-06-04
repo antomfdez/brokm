@@ -260,6 +260,26 @@ static void compile_call(Expr *expr) {
   emit_bytes(OP_CALL, (U8)argc);
 }
 
+static void compile_array(Expr *expr) {
+  int n = expr->as.array.elements.count;
+  if (n > 255) compile_error("Array literal too large.");
+  for (int i = 0; i < n; i++) compile_expr(expr->as.array.elements.items[i]);
+  emit_bytes(OP_ARRAY, (U8)n);
+}
+
+static void compile_index(Expr *expr) {
+  compile_expr(expr->as.index.object);
+  compile_expr(expr->as.index.index);
+  emit_byte(OP_INDEX_GET);
+}
+
+static void compile_index_set(Expr *expr) {
+  compile_expr(expr->as.index_set.object);
+  compile_expr(expr->as.index_set.index);
+  compile_expr(expr->as.index_set.value);
+  emit_byte(OP_INDEX_SET);
+}
+
 static void compile_expr(Expr *expr) {
   currentLine = expr->line;
   switch (expr->kind) {
@@ -269,6 +289,9 @@ static void compile_expr(Expr *expr) {
     case EXPR_UNARY: compile_unary(expr); break;
     case EXPR_LOGICAL: compile_logical(expr); break;
     case EXPR_CALL: compile_call(expr); break;
+    case EXPR_ARRAY: compile_array(expr); break;
+    case EXPR_INDEX: compile_index(expr); break;
+    case EXPR_INDEX_SET: compile_index_set(expr); break;
     case EXPR_BINARY:
       compile_expr(expr->as.binary.left);
       compile_expr(expr->as.binary.right);

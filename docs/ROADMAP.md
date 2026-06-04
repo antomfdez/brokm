@@ -55,11 +55,26 @@ region/arena allocation are only meaningful once the language can hold and deref
 pointers/arrays — without that there are no call sites to manage. The same prerequisite
 (mutable aggregates) is what makes the write barrier above non-trivial. See the milestone below.
 
-## v0.3.5 — Aggregates: arrays, structs, pointers (prerequisite unlock)
+## v0.3.5 — Aggregates: arrays ✅ · structs/pointers (next)
 
-Add fixed/dynamic arrays and `class`/`struct` with mutable fields, plus a pointer/reference
-notion. This unlocks two deferred pieces at once: the GC write barrier gets real call sites
-(old→young mutation), and **manual memory** (`MAlloc`/`Free`, regions) gets something to manage.
+**Dynamic arrays ✅ (done).** Heap `ObjArray` holding any values; literal `[a, b, c]`,
+indexing `a[i]` (get/set), nesting, and `Len`/`Append` builtins (`OP_ARRAY`, `OP_INDEX_GET`,
+`OP_INDEX_SET`). Element stores apply the GC write barrier.
+
+This made the generational write barrier **load-bearing and verified**: the minor collector now
+skips the old generation entirely, so a young value reachable only through an old array survives
+only because `gc_write_barrier` recorded the edge. `tests/cases/gc_barrier.bk` proves it
+red/green — building with `-DBK_NO_WRITE_BARRIER` makes it fail (the young element is collected),
+and the default build keeps it alive.
+
+**Structs/classes + pointers (next).** `class`/`struct` with mutable fields and a
+pointer/reference notion. These add more write-barrier call sites and, crucially, give
+**manual memory** something to manage.
+
+## v0.3.6 — Manual-memory mode (after pointers)
+
+Opt-in `MAlloc` / `Free` and region/arena allocation that bypass the collector, for low-level,
+deterministic workloads. Needs the pointer/aggregate support from v0.3.5 to be meaningful.
 
 ## v0.4 — Static type checking
 

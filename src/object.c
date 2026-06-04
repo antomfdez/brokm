@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "gc.h"
 #include "memory.h"
 #include "object.h"
 #include "table.h"
@@ -77,6 +78,18 @@ ObjNative *native_new(NativeFn fn, ObjString *name) {
   return native;
 }
 
+ObjArray *array_new(void) {
+  ObjArray *array = (ObjArray *)allocate_object(sizeof(ObjArray), OBJ_ARRAY);
+  value_array_init(&array->elements);
+  return array;
+}
+
+void array_append(ObjArray *array, Value value) {
+  value_array_write(&array->elements, value);
+  /* The store may create an old-array -> young-value edge. */
+  gc_write_barrier((Obj *)array, value);
+}
+
 static void print_function(ObjFunction *function) {
   if (function->name == NULL) {
     printf("<script>");
@@ -85,11 +98,21 @@ static void print_function(ObjFunction *function) {
   printf("<func %s>", function->name->chars);
 }
 
+static void print_array(ObjArray *array) {
+  printf("[");
+  for (int i = 0; i < array->elements.count; i++) {
+    if (i > 0) printf(", ");
+    value_print(array->elements.values[i]);
+  }
+  printf("]");
+}
+
 void object_print(Value v) {
   switch (OBJ_TYPE(v)) {
     case OBJ_STRING:   printf("%s", AS_CSTRING(v)); break;
     case OBJ_FUNCTION: print_function(AS_FUNCTION(v)); break;
     case OBJ_NATIVE:   printf("<native %s>", AS_NATIVE(v)->name->chars); break;
+    case OBJ_ARRAY:    print_array(AS_ARRAY(v)); break;
     default:           printf("<obj>"); break;
   }
 }
@@ -111,6 +134,12 @@ void object_free(Obj *obj) {
     case OBJ_NATIVE:
       FREE(ObjNative, obj);
       break;
+    case OBJ_ARRAY: {
+      ObjArray *a = (ObjArray *)obj;
+      value_array_free(&a->elements);
+      FREE(ObjArray, obj);
+      break;
+    }
   }
 }
 
