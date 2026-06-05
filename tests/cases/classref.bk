@@ -1,0 +1,28 @@
+// Self-referential class fields + class-typed parameters and return values.
+// (Before this language feature, `Node next;` / `Node Cons(...)` did not parse.)
+
+class Node { I64 val; Node next; }
+
+// class return type + class parameter
+Node Cons(I64 v, Node tail) { return Node(v, tail); }
+
+I64 SumList(Node n)
+{
+  if (n == NULL) return 0;
+  return n.val + SumList(n.next);   // recursion over a managed self-referential type
+}
+
+I64 Length(Node n)
+{
+  I64 c = 0;
+  while (n != NULL) { c = c + 1; n = n.next; }
+  return c;
+}
+
+// Build 1 -> 2 -> 3 -> 4 -> nil
+Node list = Cons(1, Cons(2, Cons(3, Cons(4, NULL))));
+
+"sum    = %d\n", SumList(list);
+"length = %d\n", Length(list);
+"head   = %d\n", list.val;
+"second = %d\n", list.next.val;

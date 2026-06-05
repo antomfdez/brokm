@@ -191,18 +191,26 @@ language spec.
 
 ## Self-hosting (north star)
 
-Can brokm compile itself? Eventually, yes — and the v0.6 stdlib is the first step.
-`examples/lexer.bk` is a **tokenizer for brokm written in brokm**: it scans a source string with
-`CharAt`/`Substr`/`Len`, classifies identifiers/keywords/numbers/strings/operators, and prints
-each token. Its helper functions are JIT-compiled like any other.
+Can brokm compile itself? Eventually, yes — and brokm now hosts the front-end of a compiler.
 
-- **Already enough:** functions/recursion, arrays, classes/structs, manual memory, strings +
-  the new string/IO stdlib.
+- **Step 1 — lexer ✅.** `examples/lexer.bk` is a **tokenizer for brokm written in brokm**:
+  it scans a source string with `CharAt`/`Substr`/`Len` and classifies
+  identifiers/keywords/numbers/strings/operators.
+- **Step 2 — parser + evaluator ✅.** `examples/calc.bk` is a **recursive-descent parser and
+  tree-walking evaluator written in brokm**: it tokenizes, parses into an AST with correct
+  operator precedence, and evaluates. Building it required a language fix — **class names are now
+  valid type annotations** for fields, parameters, and return values, so a self-referential
+  `class Node { Node left; Node right; }` and `Node ParseExpr()` parse. Verified red/green by
+  `tests/cases/classref.bk` (a self-referential linked list).
+
+- **Already enough:** functions/recursion, arrays, classes/structs (incl. self-referential),
+  manual memory, strings + the string/IO stdlib.
 - **Still needed:** a map/hash type (writable in-language, but a builtin would help symbol
-  tables), modules / multi-file programs, and methods (today: free functions over instances).
-- **Path:** lexer (done) → parser/AST in brokm → a code generator emitting the existing bytecode
-  (runnable on the current C VM), then — much later — a runtime in brokm, retiring the C
-  bootstrap. The baseline JIT matters here: a self-hosted compiler is compute-heavy.
+  tables), modules / multi-file programs, methods (today: free functions over instances), and
+  smaller parser conveniences (array-of-class declarations `Node[] xs`, forward declarations).
+- **Path:** lexer ✅ → parser/AST ✅ → a code generator emitting the existing bytecode (runnable
+  on the current C VM), then — much later — a runtime in brokm, retiring the C bootstrap. The
+  baseline JIT matters here: a self-hosted compiler is compute-heavy.
 
 ## Language features tracked across milestones
 

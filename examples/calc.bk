@@ -1,0 +1,115 @@
+// calc.bk — a calculator written in brokm: tokenize -> recursive-descent
+// parse into an AST -> evaluate. Self-hosting step 2 (the lexer was step 1).
+//
+// It leans on self-referential classes (`Node left; Node right;`) and
+// class-typed parameters/returns (`Node ParseExpr()`), plus the v0.6 string
+// stdlib. Operator char codes are used directly (e.g. '+' is 43).
+
+class Tok  { I64 kind; I64 val; }                 // kind: op char code, or 256 = number
+class Node { I64 op; I64 val; Node left; Node right; }  // op: 256 num, 110 negate, else binary
+
+// --- shared parser state (globals; the parse functions mutate `pos`) ---
+U0[] toks = [];
+I64 pos = 0;
+
+// --- character classes ---
+I64 IsSpace(I64 c) { return c == 32 || c == 9 || c == 10 || c == 13; }
+I64 IsDigit(I64 c) { return c >= 48 && c <= 57; }
+
+// --- AST constructors ---
+Node MakeNum(I64 v)              { return Node(256, v, NULL, NULL); }
+Node MakeBin(I64 op, Node l, Node r) { return Node(op, 0, l, r); }
+Node MakeNeg(Node c)             { return Node(110, 0, c, NULL); }
+
+// --- tokenizer: source string -> array of Tok (with a 0/EOF sentinel) ---
+U0[] Tokenize(U8 src)
+{
+  U0[] out = [];
+  I64 n = Len(src);
+  I64 i = 0;
+  while (i < n) {
+    I64 c = CharAt(src, i);
+    if (IsSpace(c)) {
+      i = i + 1;
+    } else if (IsDigit(c)) {
+      I64 start = i;
+      while (i < n && IsDigit(CharAt(src, i))) i = i + 1;
+      Append(out, Tok(256, ToInt(Substr(src, start, i - start))));
+    } else {
+      Append(out, Tok(c, 0));   // single-character operator / paren
+      i = i + 1;
+    }
+  }
+  Append(out, Tok(0, 0));       // end-of-input sentinel
+  return out;
+}
+
+I64 PeekKind() { return toks[pos].kind; }
+
+// --- recursive-descent grammar (precedence: expr -> term -> factor) ---
+// ParseFactor calls ParseExpr (defined below): all functions are defined
+// before the driver runs, and the type checker resolves forward references.
+Node ParseFactor()
+{
+  Tok t = toks[pos];
+  if (t.kind == 256) { pos = pos + 1; return MakeNum(t.val); }
+  if (t.kind == 40) {                 // '(' expr ')'
+    pos = pos + 1;
+    Node e = ParseExpr();
+    pos = pos + 1;                     // consume ')'
+    return e;
+  }
+  if (t.kind == 45) {                  // unary '-'
+    pos = pos + 1;
+    return MakeNeg(ParseFactor());
+  }
+  return MakeNum(0);                   // unexpected token: treat as 0
+}
+
+Node ParseTerm()
+{
+  Node left = ParseFactor();
+  while (PeekKind() == 42 || PeekKind() == 47 || PeekKind() == 37) {  // * / %
+    I64 op = PeekKind();
+    pos = pos + 1;
+    left = MakeBin(op, left, ParseFactor());
+  }
+  return left;
+}
+
+Node ParseExpr()
+{
+  Node left = ParseTerm();
+  while (PeekKind() == 43 || PeekKind() == 45) {                      // + -
+    I64 op = PeekKind();
+    pos = pos + 1;
+    left = MakeBin(op, left, ParseTerm());
+  }
+  return left;
+}
+
+// --- evaluator: walk the AST ---
+I64 Eval(Node n)
+{
+  if (n.op == 256) return n.val;
+  if (n.op == 110) return -Eval(n.left);
+  I64 l = Eval(n.left);
+  I64 r = Eval(n.right);
+  if (n.op == 43) return l + r;
+  if (n.op == 45) return l - r;
+  if (n.op == 42) return l * r;
+  if (n.op == 47) return l / r;
+  if (n.op == 37) return l % r;
+  return 0;
+}
+
+// --- driver ---
+U0[] exprs = ["2 + 3 * 4", "(2 + 3) * 4", "100 / (2 + 3)",
+              "17 % 5", "-(5 - 8)", "2 * -3 + 10"];
+I64 k = 0;
+for (k = 0; k < Len(exprs); k = k + 1) {
+  toks = Tokenize(exprs[k]);
+  pos = 0;
+  Node ast = ParseExpr();
+  "%-13s = %d\n", exprs[k], Eval(ast);
+}

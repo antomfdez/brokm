@@ -113,6 +113,19 @@ r.y = 99;                // ...so this also changes p.y
 - Construction sets fields positionally; omitted trailing fields are nil.
 - Only declared fields may be read or written; touching an unknown field is a
   runtime error. Fields may hold any value, including arrays and other instances.
+- A class name is a valid type for **fields, parameters, and return values**, so
+  self-referential types and class-returning functions work:
+
+  ```c
+  class Node { I64 val; Node next; }        // self-referential field
+  Node Cons(I64 v, Node tail) {             // class parameter + return type
+    return Node(v, tail);
+  }
+  ```
+
+  (The class must be declared before use; array-of-class declarations like
+  `Node[] xs` are not yet recognized — use an untyped `U0[]` list. See
+  `examples/calc.bk` for a parser/AST built this way.)
 - `class` and `struct` are synonyms. There are no pointers or methods yet (see
   the roadmap); behavior is written as free functions taking instances.
 

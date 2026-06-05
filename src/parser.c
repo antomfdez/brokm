@@ -119,6 +119,27 @@ static Type parse_consumed_type(void) {
   return base;
 }
 
+/* Parse a type annotation in a field/parameter/return position: either a
+ * built-in TYPE keyword or a previously-declared class name, with an optional
+ * `[]` array suffix. The type token is the current token (not yet consumed). A
+ * class name yields TY_INSTANCE, so fields/params/returns can be class-typed
+ * (e.g. a self-referential `Node left;`). */
+static Type parse_type_annotation(const char *what) {
+  if (match(TOKEN_TYPE)) return parse_consumed_type();
+  if (check(TOKEN_IDENTIFIER) &&
+      is_class_name(string_copy(parser.current.start, parser.current.length))) {
+    ObjString *name = intern_token(parser.current);
+    advance();
+    if (match(TOKEN_LBRACKET)) {
+      consume(TOKEN_RBRACKET, "Expect ']' in array type.");
+      return ty(TY_ARRAY);
+    }
+    return ty_named(TY_INSTANCE, name);
+  }
+  consume(TOKEN_TYPE, what); /* neither: emit the standard expected-type error */
+  return ty(TY_UNKNOWN);
+}
+
 /* Append `t` to a growable Type array, growing in lockstep with a name list. */
 static Type *push_type(Type *arr, int *count, int *cap, Type t) {
   if (*cap < *count + 1) {
@@ -564,8 +585,7 @@ static Stmt *function_declaration(Token nameTok, Type returnType) {
   consume(TOKEN_LPAREN, "Expect '(' after function name.");
   if (!check(TOKEN_RPAREN)) {
     do {
-      consume(TOKEN_TYPE, "Expect parameter type.");
-      Type pt = parse_consumed_type();
+      Type pt = parse_type_annotation("Expect parameter type.");
       consume(TOKEN_IDENTIFIER, "Expect parameter name.");
       namelist_write(&s->as.func.params, intern_token(parser.previous));
       paramTypes = push_type(paramTypes, &ptCount, &ptCap, pt);
@@ -721,8 +741,7 @@ static Stmt *class_declaration(void) {
   int ftCount = 0, ftCap = 0;
   consume(TOKEN_LBRACE, "Expect '{' before class body.");
   while (!check(TOKEN_RBRACE) && !check(TOKEN_EOF)) {
-    consume(TOKEN_TYPE, "Expect field type.");
-    Type ft = parse_consumed_type();
+    Type ft = parse_type_annotation("Expect field type.");
     consume(TOKEN_IDENTIFIER, "Expect field name.");
     namelist_write(&s->as.klass.fields, intern_token(parser.previous));
     fieldTypes = push_type(fieldTypes, &ftCount, &ftCap, ft);
@@ -735,14 +754,20 @@ static Stmt *class_declaration(void) {
   return s;
 }
 
-/* `ClassName var;` or `ClassName var = expr;` - a bare declaration default-
- * constructs by calling the class. */
+/* A declaration led by a class name: `ClassName fn(...) { }` (function with a
+ * class return type), `ClassName var = expr;`, or `ClassName var;` (which
+ * default-constructs by calling the class). */
 static Stmt *class_var_declaration(void) {
   advance(); /* consume the class name into `previous` */
   ObjString *className = intern_token(parser.previous);
   int line = parser.previous.line;
   consume(TOKEN_IDENTIFIER, "Expect variable name.");
+  Token nameTok = parser.previous;
   ObjString *name = intern_token(parser.previous);
+
+  if (check(TOKEN_LPAREN)) {
+    return function_declaration(nameTok, ty_named(TY_INSTANCE, className));
+  }
 
   Expr *init;
   if (match(TOKEN_EQ)) {
