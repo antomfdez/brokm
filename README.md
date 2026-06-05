@@ -5,11 +5,11 @@ language with a clean [HolyC](https://en.wikipedia.org/wiki/TempleOS#HolyC)-flav
 It is built primarily for its author's own use, with four design goals: **small, fast, robust,
 and easy to embed**.
 
-This is **v0.4.1**: a working bytecode VM with a precise, **generational** mark-sweep garbage
+This is **v0.5**: a working bytecode VM with a precise, **generational** mark-sweep garbage
 collector, aggregate types (arrays + classes/structs), an opt-in **manual-memory** mode for
 low-level work, a **static type checker** that validates the HolyC type annotations before
-any code runs, and **typed bytecode** that specializes the int hot path. A JIT compiler is next
-on the roadmap — the engine is structured so it slots in without rewrites
+any code runs, **typed bytecode** that specializes the int hot path, and a **baseline JIT** that
+compiles hot functions to native arm64 code (with a full interpreter fallback)
 (see [docs/ROADMAP.md](docs/ROADMAP.md)).
 
 ```holyc
@@ -37,6 +37,7 @@ make              # builds ./brokm  (-std=c99 -Wall -Wextra, 0 warnings)
 ./brokm           # start the REPL
 make test         # run the golden test suite
 make test-gc      # run the suite with the GC firing on every allocation
+make bench        # benchmark the JIT against the interpreter (Fib)
 make debug        # ASan/UBSan + bytecode/exec tracing build
 ```
 
@@ -76,15 +77,19 @@ int main(void) {
 
 ## Status
 
-v0.4 runs real programs (arithmetic, variables, control flow, functions, recursion, strings,
+v0.5 runs real programs (arithmetic, variables, control flow, functions, recursion, strings,
 **dynamic arrays**, **classes/structs**, **manual memory**, printing) on a stack bytecode VM,
 with a precise **generational** mark-sweep collector (minor + major, young→old promotion) whose
 write barrier is exercised by array and field mutation and verified red/green. A **static type
-checker** now validates the type annotations between parse and compile — catching arity,
-argument, field, and class-type errors before execution — using gradual typing so existing
-programs are unaffected. The compiler also emits **typed bytecode**: int-specialized arithmetic
-and comparison opcodes on the hot path, with a runtime guard that deopts to the generic handler
-so gradual typing stays correct. Next up: a JIT — see the roadmap.
+checker** validates the type annotations between parse and compile — catching arity, argument,
+field, and class-type errors before execution — using gradual typing so existing programs are
+unaffected. The compiler emits **typed bytecode**: int-specialized arithmetic and comparison
+opcodes on the hot path, with a runtime guard that deopts to the generic handler so gradual
+typing stays correct. Finally, a **baseline JIT** (arm64/macOS) compiles hot functions to native
+code in `mmap`'d executable pages — profile-gated, with inlined integer arithmetic/comparisons,
+branches, and recursion, deopt guards for correctness, and a full interpreter fallback for
+ineligible functions and every other platform. It runs the recursive `Fib` benchmark ~2× faster
+than the interpreter (`make bench`). Next up: an x64 backend and a stdlib — see the roadmap.
 
 ## License
 

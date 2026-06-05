@@ -6,6 +6,7 @@
 
 #include "compiler.h"
 #include "gc.h"
+#include "jit.h"
 #include "memory.h"
 #include "natives.h"
 #include "object.h"
@@ -66,9 +67,11 @@ void vm_init(void) {
   table_init(&vm.globals);
   table_init(&vm.strings);
   natives_register();
+  jit_init();
 }
 
 void vm_free(void) {
+  jit_shutdown();
   table_free(&vm.globals);
   table_free(&vm.strings);
   objects_free_all();
@@ -92,6 +95,22 @@ static bool call_function(ObjFunction *fn, int argCount) {
                   fn->name ? fn->name->chars : "<script>", fn->arity, argCount);
     return false;
   }
+#ifndef BK_NO_JIT
+  /* Profile-gated JIT: compile once hot, then run the native code directly.
+   * Native functions do not use vm.frames — their generated epilogue leaves the
+   * result on the value stack just as OP_RETURN would. */
+  if (fn->nativeCode == NULL && !fn->jitDisabled &&
+      ++fn->callCount >= jit_threshold()) {
+    jit_try_compile(fn);
+  }
+  if (fn->nativeCode != NULL) {
+    if (vm.stackTop - vm.stack > BK_STACK_MAX - BK_SLOT_COUNT) {
+      runtime_error("Stack overflow.");
+      return false;
+    }
+    return ((JitFn)fn->nativeCode)(vm.stackTop - argCount - 1);
+  }
+#endif
   if (vm.frameCount == BK_FRAMES_MAX) {
     runtime_error("Stack overflow.");
     return false;
@@ -244,7 +263,11 @@ static bool do_binary(U8 op) {
   }
 }
 
-static InterpretResult run(void) {
+/* Run bytecode until the call stack unwinds back to `baseFrameCount`. The top
+ * level passes 0 (run the whole script); the JIT's call helper passes the frame
+ * count it saw before a bytecode callee was pushed, so it executes exactly that
+ * nested call and returns control to the native code. */
+static InterpretResult run_until(int baseFrameCount) {
   CallFrame *frame = &vm.frames[vm.frameCount - 1];
 
 #define READ_BYTE() (*frame->ip++)
@@ -574,6 +597,9 @@ static InterpretResult run(void) {
         }
         vm.stackTop = frame->slots;
         vm_push(result);
+        if (vm.frameCount == baseFrameCount) {
+          return BK_OK; /* re-entrant runner: hand the result back to the caller */
+        }
         frame = &vm.frames[vm.frameCount - 1];
         break;
       }
@@ -586,6 +612,65 @@ static InterpretResult run(void) {
 #undef READ_STRING
 #undef BINARY
 }
+
+#ifndef BK_NO_JIT
+/* ---- JIT call-backs ----------------------------------------------------
+ * Operations the JIT does not inline call these, which run the interpreter's
+ * own logic on the same VM value stack as the matching opcodes. The generated
+ * code flushes its cached stack-top to vm.stackTop before calling and reloads
+ * it after. Each returns false (after reporting) on a runtime error. Declared
+ * in jit.h; the generated code bakes their addresses. */
+
+bool jit_h_binary(U8 op) {
+  if (op == OP_ADD && IS_STRING(peek(0)) && IS_STRING(peek(1))) {
+    concatenate();
+    return true;
+  }
+  return do_binary(op);
+}
+
+bool jit_h_equal(int negate) {
+  Value b = vm_pop(), a = vm_pop();
+  bool eq = value_equal(a, b);
+  vm_push(BOOL_VAL(negate ? !eq : eq));
+  return true;
+}
+
+bool jit_h_get_global(ObjString *name) {
+  Value value;
+  if (!table_get(&vm.globals, name, &value)) {
+    runtime_error("Undefined variable '%s'.", name->chars);
+    return false;
+  }
+  vm_push(value);
+  return true;
+}
+
+bool jit_h_set_global(ObjString *name) {
+  if (table_set(&vm.globals, name, peek(0))) {
+    table_delete(&vm.globals, name);
+    runtime_error("Undefined variable '%s'.", name->chars);
+    return false;
+  }
+  return true;
+}
+
+bool jit_h_call(int argCount) {
+  int saved = vm.frameCount;
+  if (!call_value(peek(argCount), argCount)) return false;
+  if (vm.frameCount > saved) {
+    /* a bytecode frame was pushed: run exactly that nested call */
+    return run_until(saved) == BK_OK;
+  }
+  return true; /* native / native-C / class already produced the result */
+}
+
+bool jit_h_print(int argCount) {
+  bk_format(argCount, vm.stackTop - argCount);
+  vm.stackTop -= argCount;
+  return true;
+}
+#endif /* BK_NO_JIT */
 
 InterpretResult vm_interpret(const char *source) {
   /* Parsing and compilation allocate objects (interned names, functions,
@@ -609,9 +694,13 @@ InterpretResult vm_interpret(const char *source) {
   free_stmtlist(&program);
   if (script == NULL) return BK_COMPILE_ERROR;
 
+  /* The top-level script has a bespoke invocation (call_function then
+   * run_until below), so it must stay on the interpreter — never JIT it. */
+  script->jitDisabled = true;
+
   vm_push(OBJ_VAL(script));
   call_function(script, 0);
 
   vm.gcEnabled = true; /* the script and its constants are now rooted */
-  return run();
+  return run_until(0);
 }

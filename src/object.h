@@ -39,6 +39,12 @@ typedef struct {
   int arity;
   Chunk chunk;
   ObjString *name;
+  /* Baseline JIT (v0.5). callCount drives profile gating; nativeCode is the
+   * compiled entry (a JitFn) once hot, or NULL to use the interpreter;
+   * jitDisabled marks a function the JIT bailed on so it is never retried. */
+  int callCount;
+  void *nativeCode;
+  bool jitDisabled;
 } ObjFunction;
 
 typedef Value (*NativeFn)(int argCount, Value *args);

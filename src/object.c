@@ -67,6 +67,9 @@ ObjFunction *function_new(void) {
       (ObjFunction *)allocate_object(sizeof(ObjFunction), OBJ_FUNCTION);
   function->arity = 0;
   function->name = NULL;
+  function->callCount = 0;
+  function->nativeCode = NULL;
+  function->jitDisabled = false;
   chunk_init(&function->chunk);
   return function;
 }

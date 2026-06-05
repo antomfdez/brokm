@@ -1,0 +1,7 @@
+// Recursion-heavy benchmark for the baseline JIT (Fib is fully JIT-eligible).
+I64 Fib(I64 n)
+{
+  if (n < 2) return n;
+  return Fib(n - 1) + Fib(n - 2);
+}
+"Fib(34) = %d\n", Fib(34);

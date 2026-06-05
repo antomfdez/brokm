@@ -8,7 +8,7 @@ SRC := $(wildcard src/*.c)
 OBJ := $(SRC:.c=.o)
 BIN := brokm
 
-.PHONY: all debug test clean
+.PHONY: all debug test bench clean
 
 all: $(BIN)
 
@@ -32,6 +32,13 @@ test-gc: clean
 	$(CC) $(CFLAGS) -DBK_DEBUG_STRESS_GC -o $(BIN) $(SRC) $(LDFLAGS)
 	@bash tests/run_tests.sh
 	@$(MAKE) --no-print-directory clean
+
+# Benchmark the JIT against the interpreter on a recursion-heavy program.
+bench:
+	$(CC) $(CFLAGS) -o /tmp/brokm-jit $(SRC) $(LDFLAGS)
+	$(CC) $(CFLAGS) -DBK_NO_JIT -o /tmp/brokm-nojit $(SRC) $(LDFLAGS)
+	@echo "interpreter:"; time /tmp/brokm-nojit bench/fib.bk
+	@echo "JIT:";         time /tmp/brokm-jit   bench/fib.bk
 
 clean:
 	rm -f $(OBJ) $(BIN)

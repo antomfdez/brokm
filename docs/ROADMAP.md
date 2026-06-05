@@ -136,10 +136,37 @@ red/green: dropping the `IS_INT` check makes the float-in-int-slot case in
 builds produce byte-identical output. Equality (`== !=`, any-value) and bitwise/shift (already
 integer-only generic paths) are not specialized — an easy future extension.
 
-## v0.5 — Baseline JIT
+## v0.5 — Baseline JIT ✅ (done, arm64/macOS)
 
-Compile hot functions to native code into `mmap`'d executable pages (arm64 first, then x64),
-with a VM fallback. Profile-gated; benchmark-driven.
+Hot functions are compiled to native **arm64** code in `mmap`'d executable pages
+(`MAP_JIT` + `pthread_jit_write_protect_np`), profile-gated, with a full interpreter fallback.
+The generator lives in `jit_arm64.c` (driver/threshold in `jit.c`); on any other platform, or
+with `-DBK_NO_JIT`, every function runs on the interpreter.
+
+- **Profiling.** `ObjFunction` carries `callCount`/`nativeCode`/`jitDisabled`. A function is
+  compiled once its call count crosses a threshold (env `BROKM_JIT_THRESHOLD`, default 50; tests
+  set `1`). A function the compiler bails on is marked disabled and never retried.
+- **Faithful stack mirror.** Generated code runs on the *same* VM value stack as the
+  interpreter, op-for-op, so it is correct by construction. Integer arithmetic, comparisons, and
+  control flow (`if`/loops/recursion) are inlined as native instructions; `x19` holds the frame
+  base and `x20` caches `vm.stackTop`. Everything else — globals, calls, `print`, equality —
+  calls back into the interpreter's own C helpers (`jit_h_*` in vm.c). Calls re-enter through
+  `call_value`; native↔native recursion (e.g. `Fib`) stays in native+C.
+- **Guarded fast path.** Because brokm is gradually typed, an int-typed slot may hold a float at
+  runtime, so each inlined op checks the operand tags and **deopts** to the C helper on a miss
+  (and on divide-by-zero), preserving exact semantics.
+- **Eligibility.** Functions touching aggregates/objects (arrays, indexing, fields), or
+  bitwise/unary ops, are ineligible and run on the interpreter — graceful fallback, verified by
+  the array/struct tests still passing.
+- **Verified.** Output is byte-identical to the interpreter across the whole suite three ways —
+  default, forced (`BROKM_JIT_THRESHOLD=1`), and `-DBK_NO_JIT` — and under GC stress.
+  `tests/cases/jit.bk` covers recursion, loops, comparisons, and int div/mod, all natively
+  compiled. **Speedup:** `make bench` (Fib(34)) runs ~2× faster than the interpreter
+  (≈303 ms → ≈153 ms, best-of-5 on Apple Silicon).
+
+**Deferred (v0.5.x):** x64 backend; JIT'd frames in the error backtrace (native frames currently
+omit their backtrace line); inlining bitwise/unary ops and aggregates; keeping `vm.stackTop` in a
+register across calls.
 
 ## v0.6 — Embedding, stdlib, polish
 

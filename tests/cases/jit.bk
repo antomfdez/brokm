@@ -1,0 +1,35 @@
+// v0.5 baseline JIT: functions that become hot are compiled to native arm64
+// code. Output must be identical to the interpreter (run with BROKM_JIT_THRESHOLD=1
+// to force compilation). Exercises recursion+calls, loops/branches, comparisons,
+// and integer division/modulo on the native fast path.
+
+I64 Fib(I64 n)
+{
+  if (n < 2) return n;
+  return Fib(n - 1) + Fib(n - 2);
+}
+
+I64 Sum(I64 n)
+{
+  I64 acc = 0;
+  I64 i = 0;
+  for (i = 1; i <= n; ++i) acc = acc + i;
+  return acc;
+}
+
+I64 DivMod(I64 a, I64 b)
+{
+  return (a / b) * 100 + (a % b);
+}
+
+I64 Max(I64 a, I64 b)
+{
+  if (a > b) return a;
+  return b;
+}
+
+I64 i = 0;
+for (i = 0; i <= 10; ++i) "Fib(%d) = %d\n", i, Fib(i);
+"Sum(100) = %d\n", Sum(100);
+"DivMod(17, 5) = %d\n", DivMod(17, 5);
+"Max(3, 9) = %d, Max(12, 4) = %d\n", Max(3, 9), Max(12, 4);
