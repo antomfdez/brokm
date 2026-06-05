@@ -9,6 +9,7 @@ Expr *expr_new(ExprKind kind, int line) {
   Expr *expr = ALLOCATE(Expr, 1);
   expr->kind = kind;
   expr->line = line;
+  expr->type = ty(TY_UNKNOWN);
   return expr;
 }
 
@@ -181,6 +182,7 @@ void free_stmt(Stmt *stmt) {
                  stmt->as.print.args.capacity);
       break;
     case STMT_FUNCTION:
+      FREE_ARRAY(Type, stmt->as.func.paramTypes, stmt->as.func.params.count);
       FREE_ARRAY(ObjString *, stmt->as.func.params.items,
                  stmt->as.func.params.capacity);
       free_stmt(stmt->as.func.body);
@@ -195,6 +197,7 @@ void free_stmt(Stmt *stmt) {
                  stmt->as.switchf.cases.capacity);
       break;
     case STMT_CLASS:
+      FREE_ARRAY(Type, stmt->as.klass.fieldTypes, stmt->as.klass.fields.count);
       FREE_ARRAY(ObjString *, stmt->as.klass.fields.items,
                  stmt->as.klass.fields.capacity);
       break;

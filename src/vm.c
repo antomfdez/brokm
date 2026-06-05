@@ -11,6 +11,7 @@
 #include "object.h"
 #include "parser.h"
 #include "table.h"
+#include "typecheck.h"
 #include "value.h"
 #include "vm.h"
 
@@ -528,6 +529,11 @@ InterpretResult vm_interpret(const char *source) {
   StmtList program;
   bool ok = parse(source, &program);
   if (!ok) {
+    free_stmtlist(&program);
+    return BK_COMPILE_ERROR;
+  }
+
+  if (!typecheck(&program)) {
     free_stmtlist(&program);
     return BK_COMPILE_ERROR;
   }

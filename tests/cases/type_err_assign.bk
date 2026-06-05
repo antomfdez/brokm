@@ -1,0 +1,4 @@
+// A variable typed as one class cannot hold an instance of another.
+class A { I64 x; }
+class B { I64 y; }
+A a = B(5);

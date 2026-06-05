@@ -9,7 +9,10 @@ source (.bk)
  tokens
    │  parser.c       recursive descent (statements) + Pratt (expressions)
    ▼
- AST  (ast.c/.h)     the seam for the future type checker (v0.4) and JIT (v0.5)
+ AST  (ast.c/.h)     the seam for the type checker (v0.4) and the future JIT (v0.5)
+   │  typecheck.c    static type-checking pass over the AST (gradual; v0.4)
+   ▼
+ AST  (typed)
    │  compiler.c     single-pass AST walk → bytecode
    ▼
  ObjFunction + Chunk (chunk.c)   bytecode, constant pool, line table
@@ -34,6 +37,8 @@ attach cleanly later — so it earns its keep.
 | `lexer.c` | hand-written scanner |
 | `ast.c` | AST nodes, list helpers, recursive free |
 | `parser.c` | tokens → AST |
+| `types.c` | the static type lattice (`Type`) and assignability rules |
+| `typecheck.c` | gradual static type-checking pass over the AST (v0.4) |
 | `compiler.c` | AST → bytecode |
 | `chunk.c` | bytecode buffer |
 | `vm.c` | the interpreter loop, call frames, globals |

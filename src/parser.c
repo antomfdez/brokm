@@ -95,6 +95,41 @@ static ObjString *intern_token(Token t) {
   return string_copy(t.start, t.length);
 }
 
+/* ---- type annotations ------------------------------------------------- */
+
+/* Map a TOKEN_TYPE lexeme to a TypeKind. All integer widths collapse to TY_INT
+ * (brokm integers are I64 at runtime); F64 and Bool are distinct. `U0` is the
+ * HolyC void/generic type, treated as gradual (TY_UNKNOWN) so a `U0` slot may
+ * hold anything, matching how existing brokm code uses it. */
+static Type token_to_type(Token t) {
+  if (t.length == 2 && memcmp(t.start, "U0", 2) == 0) return ty(TY_UNKNOWN);
+  if (t.length == 3 && memcmp(t.start, "F64", 3) == 0) return ty(TY_FLOAT);
+  if (t.length == 4 && memcmp(t.start, "Bool", 4) == 0) return ty(TY_BOOL);
+  return ty(TY_INT);
+}
+
+/* The TOKEN_TYPE has just been consumed (it is in parser.previous). Consume an
+ * optional `[]` array suffix and return the resulting Type. */
+static Type parse_consumed_type(void) {
+  Type base = token_to_type(parser.previous);
+  if (match(TOKEN_LBRACKET)) {
+    consume(TOKEN_RBRACKET, "Expect ']' in array type.");
+    return ty(TY_ARRAY); /* element type is left TY_UNKNOWN */
+  }
+  return base;
+}
+
+/* Append `t` to a growable Type array, growing in lockstep with a name list. */
+static Type *push_type(Type *arr, int *count, int *cap, Type t) {
+  if (*cap < *count + 1) {
+    int old = *cap;
+    *cap = GROW_CAPACITY(old);
+    arr = GROW_ARRAY(Type, arr, old, *cap);
+  }
+  arr[(*count)++] = t;
+  return arr;
+}
+
 static I64 parse_char(Token t) {
   const char *p = t.start + 1; /* skip opening quote */
   if (*p == '\\') {
@@ -502,7 +537,7 @@ static Stmt *expr_statement(void) {
   return s;
 }
 
-static Stmt *var_declaration(Token nameTok) {
+static Stmt *var_declaration(Token nameTok, Type declared) {
   int line = nameTok.line;
   ObjString *name = intern_token(nameTok);
   Expr *init = NULL;
@@ -511,41 +546,49 @@ static Stmt *var_declaration(Token nameTok) {
   Stmt *s = stmt_new(STMT_VAR, line);
   s->as.var.name = name;
   s->as.var.init = init;
+  s->as.var.declared = declared;
   return s;
 }
 
-static Stmt *function_declaration(Token nameTok) {
+static Stmt *function_declaration(Token nameTok, Type returnType) {
   int line = nameTok.line;
   ObjString *name = intern_token(nameTok);
   Stmt *s = stmt_new(STMT_FUNCTION, line);
   s->as.func.name = name;
+  s->as.func.returnType = returnType;
+  s->as.func.paramTypes = NULL;
   namelist_init(&s->as.func.params);
 
+  Type *paramTypes = NULL;
+  int ptCount = 0, ptCap = 0;
   consume(TOKEN_LPAREN, "Expect '(' after function name.");
   if (!check(TOKEN_RPAREN)) {
     do {
       consume(TOKEN_TYPE, "Expect parameter type.");
-      if (match(TOKEN_LBRACKET)) {
-        consume(TOKEN_RBRACKET, "Expect ']' in array type.");
-      }
+      Type pt = parse_consumed_type();
       consume(TOKEN_IDENTIFIER, "Expect parameter name.");
       namelist_write(&s->as.func.params, intern_token(parser.previous));
+      paramTypes = push_type(paramTypes, &ptCount, &ptCap, pt);
     } while (match(TOKEN_COMMA));
   }
   consume(TOKEN_RPAREN, "Expect ')' after parameters.");
+  /* Shrink to exact length so the count-based free in ast.c balances. */
+  if (ptCap != ptCount) paramTypes = GROW_ARRAY(Type, paramTypes, ptCap, ptCount);
+  s->as.func.paramTypes = paramTypes;
+
   consume(TOKEN_LBRACE, "Expect '{' before function body.");
   s->as.func.body = block();
   return s;
 }
 
 /* A declaration begins with a type keyword; `<type> name (` is a function,
- * otherwise it is a variable. */
+ * otherwise it is a variable. The TOKEN_TYPE is already in parser.previous. */
 static Stmt *typed_declaration(void) {
-  if (match(TOKEN_LBRACKET)) consume(TOKEN_RBRACKET, "Expect ']' in array type.");
+  Type type = parse_consumed_type();
   consume(TOKEN_IDENTIFIER, "Expect name after type.");
   Token nameTok = parser.previous;
-  if (check(TOKEN_LPAREN)) return function_declaration(nameTok);
-  return var_declaration(nameTok);
+  if (check(TOKEN_LPAREN)) return function_declaration(nameTok, type);
+  return var_declaration(nameTok, type);
 }
 
 static Stmt *block(void) {
@@ -671,20 +714,24 @@ static Stmt *class_declaration(void) {
 
   Stmt *s = stmt_new(STMT_CLASS, line);
   s->as.klass.name = name;
+  s->as.klass.fieldTypes = NULL;
   namelist_init(&s->as.klass.fields);
 
+  Type *fieldTypes = NULL;
+  int ftCount = 0, ftCap = 0;
   consume(TOKEN_LBRACE, "Expect '{' before class body.");
   while (!check(TOKEN_RBRACE) && !check(TOKEN_EOF)) {
     consume(TOKEN_TYPE, "Expect field type.");
-    if (match(TOKEN_LBRACKET)) {
-      consume(TOKEN_RBRACKET, "Expect ']' in array type.");
-    }
+    Type ft = parse_consumed_type();
     consume(TOKEN_IDENTIFIER, "Expect field name.");
     namelist_write(&s->as.klass.fields, intern_token(parser.previous));
+    fieldTypes = push_type(fieldTypes, &ftCount, &ftCap, ft);
     consume(TOKEN_SEMICOLON, "Expect ';' after field declaration.");
   }
   consume(TOKEN_RBRACE, "Expect '}' after class body.");
   match(TOKEN_SEMICOLON); /* optional trailing ';' */
+  if (ftCap != ftCount) fieldTypes = GROW_ARRAY(Type, fieldTypes, ftCap, ftCount);
+  s->as.klass.fieldTypes = fieldTypes;
   return s;
 }
 
@@ -710,6 +757,7 @@ static Stmt *class_var_declaration(void) {
   Stmt *s = stmt_new(STMT_VAR, line);
   s->as.var.name = name;
   s->as.var.init = init;
+  s->as.var.declared = ty_named(TY_INSTANCE, className);
   return s;
 }
 

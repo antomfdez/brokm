@@ -1,0 +1,19 @@
+// v0.4: the type checker accepts well-typed programs and leaves behavior intact.
+I64 square(I64 n) { return n * n; }
+F64 half(F64 x) { return x / 2.0; }
+
+class Vec { I64 x; I64 y; }
+
+I64 a = 3;
+F64 b = 4.5;
+"%d\n", square(a);
+"%g\n", half(b);
+F64 mix = a + b;        // int + float coercion
+"%g\n", mix;
+
+Vec v = Vec(1, 2);
+v.x = v.x + 10;
+"%d %d\n", v.x, v.y;
+
+I64[] arr = [10, 20, 30];
+"%d\n", arr[1];

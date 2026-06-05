@@ -1,0 +1,4 @@
+// Assigning to a field the class does not declare is a static error.
+class Point { I64 x; I64 y; }
+Point p = Point(1, 2);
+p.z = 5;

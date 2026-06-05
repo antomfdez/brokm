@@ -5,10 +5,11 @@ language with a clean [HolyC](https://en.wikipedia.org/wiki/TempleOS#HolyC)-flav
 It is built primarily for its author's own use, with four design goals: **small, fast, robust,
 and easy to embed**.
 
-This is **v0.3.6**: a working bytecode VM with a precise, **generational** mark-sweep garbage
-collector, aggregate types (arrays + classes/structs), and an opt-in **manual-memory** mode for
-low-level work. A static type checker and a JIT compiler are next on the roadmap — the engine is
-structured so they slot in without rewrites (see [docs/ROADMAP.md](docs/ROADMAP.md)).
+This is **v0.4**: a working bytecode VM with a precise, **generational** mark-sweep garbage
+collector, aggregate types (arrays + classes/structs), an opt-in **manual-memory** mode for
+low-level work, and a **static type checker** that validates the HolyC type annotations before
+any code runs. A JIT compiler is next on the roadmap — the engine is structured so it slots in
+without rewrites (see [docs/ROADMAP.md](docs/ROADMAP.md)).
 
 ```holyc
 // hello.bk — top-level code runs; a bare string statement prints.
@@ -74,11 +75,13 @@ int main(void) {
 
 ## Status
 
-v0.3.6 runs real programs (arithmetic, variables, control flow, functions, recursion, strings,
+v0.4 runs real programs (arithmetic, variables, control flow, functions, recursion, strings,
 **dynamic arrays**, **classes/structs**, **manual memory**, printing) on a stack bytecode VM,
 with a precise **generational** mark-sweep collector (minor + major, young→old promotion) whose
-write barrier is exercised by array and field mutation and verified red/green. Next up: a static
-type checker, then a JIT — see the roadmap.
+write barrier is exercised by array and field mutation and verified red/green. A **static type
+checker** now validates the type annotations between parse and compile — catching arity,
+argument, field, and class-type errors before execution — using gradual typing so existing
+programs are unaffected. Next up: a JIT — see the roadmap.
 
 ## License
 

@@ -87,11 +87,39 @@ rest of the program stays garbage-collected. Address-of-variable (`&`/`*` on man
 intentionally omitted — taking raw addresses of GC-managed values fights the collector; raw
 pointers come only from `MAlloc`. (Region/arena allocation could layer on later if needed.)
 
-## v0.4 — Static type checking
+## v0.4 — Static type checking ✅ (done)
 
-Use the AST + HolyC type annotations (`U8`…`I64`, `F64`, `Bool`, `U0`, class names) for real
-checks and explicit coercions; emit typed bytecode (specialized int/float ops). This also fixes
-the v0.1 postfix `++`/`--` and switch-scope simplifications.
+A **type-checking pass** (`typecheck.c`) runs over the AST between parse and bytecode
+compilation. The HolyC type annotations — previously parsed and discarded — are now carried
+through the tree (`Type` on every `Expr`; declared/return/param/field types on the relevant
+statements) and used for real checks, reported with line numbers before any code runs:
+
+- **Calls**: a user function is checked for exact arity and argument-type compatibility;
+  a constructor call (`Point(...)`) is checked against the class's declared fields (at most
+  one argument per field, missing fields default to nil, matching the VM).
+- **Fields**: `obj.x` get/set on a class instance must name a declared field of that class.
+- **Aggregates vs scalars**: indexing requires an array/string; `+` requires numbers or
+  strings; `- * / %` and bitwise/shift require numerics/integers; instances cannot be added,
+  indexed, or assigned across class types.
+- **Assignment/initialization**: a class-typed slot only accepts an instance of that class
+  (or `nil`).
+
+**Gradual by design.** brokm's scalar type keywords are weak storage hints — idiomatic code
+keeps strings and pointers in `U8` slots and uses `U0` as a generic/void type — so scalars,
+strings, pointers, and arrays interconvert freely and `U0` maps to a gradual "unknown" that is
+compatible with everything. Strict identity is enforced only where brokm has real type
+identity: **class instances and class values**. Anything the checker cannot pin down is
+`TY_UNKNOWN` and never wrongly rejected, so all existing programs still compile. Verified
+red/green: `tests/cases/type_err_{arg,field,assign}.bk` are rejected statically (bypassing the
+pass lets the same errors fall through to runtime), and `tests/cases/typecheck.bk` confirms a
+well-typed program still runs and prints correctly.
+
+**Deferred:**
+- **v0.4.1** — emit typed bytecode (specialized int/float arithmetic opcodes) using the
+  resolved `Expr` types the checker now records. Kept separate so the working VM hot path is
+  untouched by the checker itself.
+- **Separate fix** — the v0.1 postfix `++`/`--` value semantics and switch-scope
+  simplification (independent of typing).
 
 ## v0.5 — Baseline JIT
 

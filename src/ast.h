@@ -8,6 +8,7 @@
 
 #include "common.h"
 #include "token.h"
+#include "types.h"
 #include "value.h"
 
 typedef struct Expr Expr;
@@ -49,6 +50,7 @@ typedef enum {
 struct Expr {
   ExprKind kind;
   int line;
+  Type type; /* resolved by the type checker; TY_UNKNOWN until then */
   union {
     struct { Value value; } literal;
     struct { ObjString *name; } variable;
@@ -98,7 +100,7 @@ struct Stmt {
   int line;
   union {
     struct { Expr *expr; } expr;
-    struct { ObjString *name; Expr *init; } var;
+    struct { ObjString *name; Expr *init; Type declared; } var;
     struct { StmtList list; } block;
     struct { Expr *cond; Stmt *thenB; Stmt *elseB; } iff;
     struct { Expr *cond; Stmt *body; } whilef;
@@ -106,9 +108,19 @@ struct Stmt {
     struct { Stmt *body; Expr *cond; } dowhile;
     struct { Expr *value; } ret;
     struct { ExprList args; } print;
-    struct { ObjString *name; NameList params; Stmt *body; } func;
+    struct {
+      ObjString *name;
+      NameList params;
+      Type *paramTypes; /* parallel to params.items, length params.count */
+      Type returnType;
+      Stmt *body;
+    } func;
     struct { Expr *disc; CaseList cases; } switchf;
-    struct { ObjString *name; NameList fields; } klass;
+    struct {
+      ObjString *name;
+      NameList fields;
+      Type *fieldTypes; /* parallel to fields.items, length fields.count */
+    } klass;
   } as;
 };
 
