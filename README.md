@@ -9,8 +9,9 @@ This is **v0.6**: a working bytecode VM with a precise, **generational** mark-sw
 collector, aggregate types (arrays + classes/structs), an opt-in **manual-memory** mode for
 low-level work, a **static type checker** that validates the HolyC type annotations before
 any code runs, **typed bytecode** that specializes the int hot path, a **baseline JIT** that
-compiles hot functions to native arm64 code (with a full interpreter fallback), and a **standard
-library** (file I/O, strings, math) — enough to write a [brokm tokenizer in brokm](examples/lexer.bk)
+compiles hot functions to native code (**arm64 + x86-64**, with a full interpreter fallback), and
+a **standard library** (file I/O, strings, math) — enough to write a
+[brokm tokenizer and parser in brokm](examples/calc.bk)
 (see [docs/ROADMAP.md](docs/ROADMAP.md)).
 
 ```holyc
@@ -86,15 +87,16 @@ checker** validates the type annotations between parse and compile — catching 
 field, and class-type errors before execution — using gradual typing so existing programs are
 unaffected. The compiler emits **typed bytecode**: int-specialized arithmetic and comparison
 opcodes on the hot path, with a runtime guard that deopts to the generic handler so gradual
-typing stays correct. Finally, a **baseline JIT** (arm64/macOS) compiles hot functions to native
-code in `mmap`'d executable pages — profile-gated, with inlined integer arithmetic/comparisons,
-branches, and recursion, deopt guards for correctness, and a full interpreter fallback for
-ineligible functions and every other platform. It runs the recursive `Fib` benchmark ~2× faster
-than the interpreter (`make bench`). A **standard library** of native builtins covers file I/O
-(`ReadFile`/`WriteFile`/`PrintErr`), strings (`CharAt`/`Chr`/`Substr`/`IndexOf`/`ToInt`/`ToStr`),
-and math (`Abs`/`Min`/`Max`/`Sqrt`/`Pow`/`Floor`/`Ceil`) — enough that `examples/lexer.bk`
-tokenizes brokm source written in brokm, the first step toward self-hosting. Next up: a richer
-embedding API and multi-instance VMs — see the roadmap.
+typing stays correct. A **baseline JIT** (macOS, **arm64 + x86-64**) compiles hot functions to
+native code in `mmap`'d executable pages — profile-gated, with inlined integer
+arithmetic/comparisons, branches, and recursion, deopt guards for correctness, and a full
+interpreter fallback for ineligible functions and every other platform. It runs the recursive
+`Fib` benchmark ~2× faster than the interpreter on each architecture (`make bench`). A **standard
+library** of native builtins covers file I/O (`ReadFile`/`WriteFile`/`PrintErr`), strings
+(`CharAt`/`Chr`/`Substr`/`IndexOf`/`ToInt`/`ToStr`), and math
+(`Abs`/`Min`/`Max`/`Sqrt`/`Pow`/`Floor`/`Ceil`) — enough that `examples/lexer.bk` tokenizes and
+`examples/calc.bk` parses + evaluates brokm-flavored source written in brokm, the first steps
+toward self-hosting. Next up: a richer embedding API and multi-instance VMs — see the roadmap.
 
 ## License
 

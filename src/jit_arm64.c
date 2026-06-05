@@ -16,15 +16,9 @@
  * 8-byte payload at offset 8 (asserted in jit_init). */
 #include "jit.h"
 
-#ifdef BK_JIT_ENABLED
+#if defined(BK_JIT_ENABLED) && defined(__aarch64__)
 
-#include <libkern/OSCacheControl.h>
-#include <pthread.h>
-#include <stddef.h>
-#include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <sys/mman.h>
 
 #include "vm.h" /* the global `vm` (for &vm.stackTop) + value_truthy */
 
@@ -108,47 +102,9 @@ static void patch_imm19(Emit *e, int at, int target) {
   e->code[at] = (e->code[at] & 0xFF00001Fu) | (((U32)(target - at) & 0x7FFFFu) << 5);
 }
 
-/* ---- executable page pool -------------------------------------------- */
-typedef struct Region {
-  U8 *base;
-  size_t size;
-  size_t used;
-  struct Region *next;
-} Region;
-
-static Region *g_regions = NULL;
-static bool g_jitUsable = false;
-
-static Region *region_new(size_t need) {
-  size_t size = 1u << 16;
-  if (need > size) size = (need + 0xFFFu) & ~(size_t)0xFFFu;
-  void *base = mmap(NULL, size, PROT_READ | PROT_WRITE | PROT_EXEC,
-                    MAP_PRIVATE | MAP_ANON | MAP_JIT, -1, 0);
-  if (base == MAP_FAILED) return NULL;
-  Region *r = (Region *)malloc(sizeof(Region));
-  if (r == NULL) { munmap(base, size); return NULL; }
-  r->base = (U8 *)base;
-  r->size = size;
-  r->used = 0;
-  r->next = g_regions;
-  g_regions = r;
-  return r;
-}
-
+/* Code is published into the shared executable-page pool (jit.c). */
 static void *publish(const U32 *code, int count) {
-  size_t bytes = (size_t)count * 4;
-  Region *r = g_regions;
-  if (r == NULL || r->size - r->used < bytes) {
-    r = region_new(bytes);
-    if (r == NULL) return NULL;
-  }
-  void *dst = r->base + r->used;
-  pthread_jit_write_protect_np(0);
-  memcpy(dst, code, bytes);
-  pthread_jit_write_protect_np(1);
-  sys_icache_invalidate(dst, bytes);
-  r->used += (bytes + 15u) & ~(size_t)15u;
-  return dst;
+  return jit_pool_publish(code, (size_t)count * 4);
 }
 
 /* ---- emit helpers shared by the self-test and the walker -------------- */
@@ -429,7 +385,7 @@ static void *build(Emit *e) {
   return fn;
 }
 
-static bool selftest(void) {
+bool jit_selftest_arch(void) {
   { /* f(x) = x + 41 */
     Emit e = {0};
     e_stp_pre(&e, X29, X30, SP, -32);
@@ -464,36 +420,7 @@ static bool selftest(void) {
   return true;
 }
 
-/* ---- public API ------------------------------------------------------- */
-void jit_init(void) {
-  bool layoutOK = sizeof(Value) == VAL_SZ &&
-                  offsetof(Value, type) == OFF_TYPE &&
-                  offsetof(Value, as) == OFF_AS && VAL_INT == 2 &&
-                  VAL_BOOL == 1 && VAL_NIL == 0;
-  g_jitUsable = layoutOK && selftest();
-  if (!g_jitUsable) {
-    fprintf(stderr, "brokm: JIT unavailable (self-test/layout); interpreter only.\n");
-  }
-}
+/* Backend hook: compile fn to native arm64, or NULL on bail. */
+void *jit_compile_arch(ObjFunction *fn) { return compile_chunk(fn); }
 
-void jit_shutdown(void) {
-  for (Region *r = g_regions; r != NULL;) {
-    Region *next = r->next;
-    munmap(r->base, r->size);
-    free(r);
-    r = next;
-  }
-  g_regions = NULL;
-}
-
-void jit_try_compile(ObjFunction *fn) {
-  void *entry = g_jitUsable ? compile_chunk(fn) : NULL;
-  if (entry != NULL) fn->nativeCode = entry;
-  else fn->jitDisabled = true; /* ineligible/failed: never retried */
-  if (getenv("BROKM_JIT_LOG")) {
-    fprintf(stderr, "[jit] %s %s\n", fn->name ? fn->name->chars : "<script>",
-            entry ? "compiled" : "bailed");
-  }
-}
-
-#endif /* BK_JIT_ENABLED */
+#endif /* BK_JIT_ENABLED && __aarch64__ */

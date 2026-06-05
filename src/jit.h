@@ -16,12 +16,25 @@
  * CallFrame.slots. Returns false on a runtime error (already reported). */
 typedef bool (*JitFn)(Value *slots);
 
-#if defined(__aarch64__) && defined(__APPLE__) && !defined(BK_NO_JIT)
+#if (defined(__aarch64__) || defined(__x86_64__)) && defined(__APPLE__) && \
+    !defined(BK_NO_JIT)
 #define BK_JIT_ENABLED 1
 #endif
 
 void jit_init(void);
 void jit_shutdown(void);
+
+#ifdef BK_JIT_ENABLED
+/* Shared executable-page pool (jit.c), used by the per-arch backends. */
+void *jit_pool_publish(const void *code, size_t bytes); /* copy to an exec page */
+void jit_pool_free(void);
+
+/* Per-arch backend hooks (jit_arm64.c / jit_x64.c). jit_compile_arch returns the
+ * native entry for fn, or NULL if it bailed; jit_selftest_arch validates the
+ * instruction encoders at startup. */
+void *jit_compile_arch(ObjFunction *fn);
+bool jit_selftest_arch(void);
+#endif
 
 /* Attempt to compile `fn` to native code. On success sets fn->nativeCode; on
  * failure (ineligible opcode, platform without a backend, etc.) sets
