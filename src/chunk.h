@@ -46,6 +46,19 @@ typedef enum {
   OP_INDEX_SET,
   OP_GET_FIELD,      /* operand: field-name constant index */
   OP_SET_FIELD,      /* operand: field-name constant index */
+  /* Typed (int-specialized) opcodes (v0.4.1). Emitted when the type checker has
+   * proven both operands are TY_INT. They run a branch-lean integer path but
+   * carry a runtime IS_INT guard and deopt to their generic counterpart on a
+   * miss, since gradual typing lets a float occupy a statically-int slot. */
+  OP_IADD,
+  OP_ISUB,
+  OP_IMUL,
+  OP_IDIV,
+  OP_IMOD,
+  OP_ILESS,
+  OP_ILESS_EQUAL,
+  OP_IGREATER,
+  OP_IGREATER_EQUAL,
   OP_RETURN
 } OpCode;
 

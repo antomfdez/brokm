@@ -84,6 +84,15 @@ int disassemble_instruction(Chunk *chunk, int offset) {
     case OP_INDEX_SET: return simple_instruction("OP_INDEX_SET", offset);
     case OP_GET_FIELD: return constant_instruction("OP_GET_FIELD", chunk, offset);
     case OP_SET_FIELD: return constant_instruction("OP_SET_FIELD", chunk, offset);
+    case OP_IADD: return simple_instruction("OP_IADD", offset);
+    case OP_ISUB: return simple_instruction("OP_ISUB", offset);
+    case OP_IMUL: return simple_instruction("OP_IMUL", offset);
+    case OP_IDIV: return simple_instruction("OP_IDIV", offset);
+    case OP_IMOD: return simple_instruction("OP_IMOD", offset);
+    case OP_ILESS: return simple_instruction("OP_ILESS", offset);
+    case OP_ILESS_EQUAL: return simple_instruction("OP_ILESS_EQUAL", offset);
+    case OP_IGREATER: return simple_instruction("OP_IGREATER", offset);
+    case OP_IGREATER_EQUAL: return simple_instruction("OP_IGREATER_EQUAL", offset);
     case OP_RETURN: return simple_instruction("OP_RETURN", offset);
     default:
       printf("Unknown opcode %d\n", instruction);

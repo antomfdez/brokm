@@ -1,0 +1,11 @@
+sum = 55
+fib10 = 55
+div = 3
+mod = 2
+prod = 42
+diff = 42
+gt ok
+ge ok
+deopt add = 3.5
+deopt div = 2.5
+deopt cmp ok

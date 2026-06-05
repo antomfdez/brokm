@@ -324,21 +324,88 @@ static InterpretResult run(void) {
         vm_push(BOOL_VAL(!value_equal(a, b)));
         break;
       }
-      case OP_GREATER: BINARY(OP_GREATER); break;
-      case OP_GREATER_EQUAL: BINARY(OP_GREATER_EQUAL); break;
-      case OP_LESS: BINARY(OP_LESS); break;
-      case OP_LESS_EQUAL: BINARY(OP_LESS_EQUAL); break;
-      case OP_ADD:
+      case OP_GREATER: op_greater: BINARY(OP_GREATER); break;
+      case OP_GREATER_EQUAL: op_greater_equal: BINARY(OP_GREATER_EQUAL); break;
+      case OP_LESS: op_less: BINARY(OP_LESS); break;
+      case OP_LESS_EQUAL: op_less_equal: BINARY(OP_LESS_EQUAL); break;
+      case OP_ADD: op_add:
         if (IS_STRING(peek(0)) && IS_STRING(peek(1))) {
           concatenate();
         } else if (!do_binary(OP_ADD)) {
           return BK_RUNTIME_ERROR;
         }
         break;
-      case OP_SUB: BINARY(OP_SUB); break;
-      case OP_MUL: BINARY(OP_MUL); break;
-      case OP_DIV: BINARY(OP_DIV); break;
-      case OP_MOD: BINARY(OP_MOD); break;
+      case OP_SUB: op_sub: BINARY(OP_SUB); break;
+      case OP_MUL: op_mul: BINARY(OP_MUL); break;
+      case OP_DIV: op_div: BINARY(OP_DIV); break;
+      case OP_MOD: op_mod: BINARY(OP_MOD); break;
+
+      /* Int-specialized fast paths (v0.4.1). Both operands are statically
+       * TY_INT, but gradual typing allows a float to occupy an int slot, so we
+       * guard on IS_INT and deopt to the generic opcode on a miss. */
+      case OP_IADD:
+        if (IS_INT(peek(0)) && IS_INT(peek(1))) {
+          Value b = vm_pop(), a = vm_pop();
+          vm_push(INT_VAL(AS_INT(a) + AS_INT(b)));
+          break;
+        }
+        goto op_add;
+      case OP_ISUB:
+        if (IS_INT(peek(0)) && IS_INT(peek(1))) {
+          Value b = vm_pop(), a = vm_pop();
+          vm_push(INT_VAL(AS_INT(a) - AS_INT(b)));
+          break;
+        }
+        goto op_sub;
+      case OP_IMUL:
+        if (IS_INT(peek(0)) && IS_INT(peek(1))) {
+          Value b = vm_pop(), a = vm_pop();
+          vm_push(INT_VAL(AS_INT(a) * AS_INT(b)));
+          break;
+        }
+        goto op_mul;
+      case OP_IDIV:
+        if (IS_INT(peek(0)) && IS_INT(peek(1)) && AS_INT(peek(0)) != 0) {
+          Value b = vm_pop(), a = vm_pop();
+          vm_push(INT_VAL(AS_INT(a) / AS_INT(b)));
+          break;
+        }
+        goto op_div; /* non-int or divide-by-zero: generic path reports it */
+      case OP_IMOD:
+        if (IS_INT(peek(0)) && IS_INT(peek(1)) && AS_INT(peek(0)) != 0) {
+          Value b = vm_pop(), a = vm_pop();
+          vm_push(INT_VAL(AS_INT(a) % AS_INT(b)));
+          break;
+        }
+        goto op_mod;
+      case OP_ILESS:
+        if (IS_INT(peek(0)) && IS_INT(peek(1))) {
+          Value b = vm_pop(), a = vm_pop();
+          vm_push(BOOL_VAL(AS_INT(a) < AS_INT(b)));
+          break;
+        }
+        goto op_less;
+      case OP_ILESS_EQUAL:
+        if (IS_INT(peek(0)) && IS_INT(peek(1))) {
+          Value b = vm_pop(), a = vm_pop();
+          vm_push(BOOL_VAL(AS_INT(a) <= AS_INT(b)));
+          break;
+        }
+        goto op_less_equal;
+      case OP_IGREATER:
+        if (IS_INT(peek(0)) && IS_INT(peek(1))) {
+          Value b = vm_pop(), a = vm_pop();
+          vm_push(BOOL_VAL(AS_INT(a) > AS_INT(b)));
+          break;
+        }
+        goto op_greater;
+      case OP_IGREATER_EQUAL:
+        if (IS_INT(peek(0)) && IS_INT(peek(1))) {
+          Value b = vm_pop(), a = vm_pop();
+          vm_push(BOOL_VAL(AS_INT(a) >= AS_INT(b)));
+          break;
+        }
+        goto op_greater_equal;
       case OP_BIT_AND: BINARY(OP_BIT_AND); break;
       case OP_BIT_OR: BINARY(OP_BIT_OR); break;
       case OP_BIT_XOR: BINARY(OP_BIT_XOR); break;

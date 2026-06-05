@@ -1,0 +1,36 @@
+// v0.4.1 typed bytecode: int-specialized opcodes with a runtime guard + deopt.
+
+// Int loop accumulation: OP_IADD (sum + i, ++i) and OP_ILESS_EQUAL (i <= 10).
+I64 sum = 0;
+I64 i = 0;
+for (i = 1; i <= 10; ++i) sum = sum + i;
+"sum = %d\n", sum;
+
+// Recursion: arithmetic-heavy. OP_ISUB (n - 1, n - 2), OP_IADD, OP_ILESS (n < 2).
+I64 Fib(I64 n)
+{
+  if (n < 2) return n;
+  return Fib(n - 1) + Fib(n - 2);
+}
+"fib10 = %d\n", Fib(10);
+
+// Integer division / modulo fast paths (OP_IDIV, OP_IMOD).
+"div = %d\n", 17 / 5;
+"mod = %d\n", 17 % 5;
+
+// Product / difference (OP_IMUL, OP_ISUB).
+"prod = %d\n", 6 * 7;
+"diff = %d\n", 100 - 58;
+
+// Comparisons in conditions: OP_IGREATER and OP_IGREATER_EQUAL.
+if (10 > 3) "gt ok\n";
+if (3 >= 3) "ge ok\n";
+
+// --- Deopt: gradual typing lets a float live in an int-typed slot. ---
+// c is statically I64, so `c + 1` / `c < 3` / `c / 1` emit int-specialized
+// opcodes, but c holds 2.5 at runtime. The IS_INT guard deopts to the generic
+// handler, preserving float semantics.
+I64 c = 10.0 / 4.0;
+"deopt add = %g\n", c + 1;
+"deopt div = %g\n", c / 1;
+if (c < 3) "deopt cmp ok\n";

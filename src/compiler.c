@@ -194,6 +194,23 @@ static U8 binary_op(TokenType op) {
   }
 }
 
+/* Int-specialized opcode for `op`, or OP_NIL if the operator has no typed form.
+ * Used when the checker has proven both operands are TY_INT (see compile_expr). */
+static U8 int_binary_op(TokenType op) {
+  switch (op) {
+    case TOKEN_PLUS: return OP_IADD;
+    case TOKEN_MINUS: return OP_ISUB;
+    case TOKEN_STAR: return OP_IMUL;
+    case TOKEN_SLASH: return OP_IDIV;
+    case TOKEN_PERCENT: return OP_IMOD;
+    case TOKEN_LESS: return OP_ILESS;
+    case TOKEN_LESS_EQ: return OP_ILESS_EQUAL;
+    case TOKEN_GREATER: return OP_IGREATER;
+    case TOKEN_GREATER_EQ: return OP_IGREATER_EQUAL;
+    default: return OP_NIL; /* not specialized (equality, bitwise, etc.) */
+  }
+}
+
 static void compile_literal(Expr *expr) {
   Value v = expr->as.literal.value;
   if (IS_NIL(v)) {
@@ -305,11 +322,23 @@ static void compile_expr(Expr *expr) {
     case EXPR_INDEX_SET: compile_index_set(expr); break;
     case EXPR_FIELD: compile_field(expr); break;
     case EXPR_FIELD_SET: compile_field_set(expr); break;
-    case EXPR_BINARY:
+    case EXPR_BINARY: {
       compile_expr(expr->as.binary.left);
       compile_expr(expr->as.binary.right);
-      emit_byte(binary_op(expr->as.binary.op));
+      TokenType op = expr->as.binary.op;
+      U8 emitted = binary_op(op);
+#ifndef BK_NO_TYPED_OPS
+      /* The checker proved both operands are statically TY_INT: emit the
+       * int-specialized opcode (it still guards + deopts at runtime). */
+      if (expr->as.binary.left->type.kind == TY_INT &&
+          expr->as.binary.right->type.kind == TY_INT) {
+        U8 typed = int_binary_op(op);
+        if (typed != OP_NIL) emitted = typed;
+      }
+#endif
+      emit_byte(emitted);
       break;
+    }
   }
 }
 

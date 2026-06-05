@@ -5,11 +5,12 @@ language with a clean [HolyC](https://en.wikipedia.org/wiki/TempleOS#HolyC)-flav
 It is built primarily for its author's own use, with four design goals: **small, fast, robust,
 and easy to embed**.
 
-This is **v0.4**: a working bytecode VM with a precise, **generational** mark-sweep garbage
+This is **v0.4.1**: a working bytecode VM with a precise, **generational** mark-sweep garbage
 collector, aggregate types (arrays + classes/structs), an opt-in **manual-memory** mode for
-low-level work, and a **static type checker** that validates the HolyC type annotations before
-any code runs. A JIT compiler is next on the roadmap — the engine is structured so it slots in
-without rewrites (see [docs/ROADMAP.md](docs/ROADMAP.md)).
+low-level work, a **static type checker** that validates the HolyC type annotations before
+any code runs, and **typed bytecode** that specializes the int hot path. A JIT compiler is next
+on the roadmap — the engine is structured so it slots in without rewrites
+(see [docs/ROADMAP.md](docs/ROADMAP.md)).
 
 ```holyc
 // hello.bk — top-level code runs; a bare string statement prints.
@@ -81,7 +82,9 @@ with a precise **generational** mark-sweep collector (minor + major, young→old
 write barrier is exercised by array and field mutation and verified red/green. A **static type
 checker** now validates the type annotations between parse and compile — catching arity,
 argument, field, and class-type errors before execution — using gradual typing so existing
-programs are unaffected. Next up: a JIT — see the roadmap.
+programs are unaffected. The compiler also emits **typed bytecode**: int-specialized arithmetic
+and comparison opcodes on the hot path, with a runtime guard that deopts to the generic handler
+so gradual typing stays correct. Next up: a JIT — see the roadmap.
 
 ## License
 

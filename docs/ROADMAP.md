@@ -115,11 +115,26 @@ pass lets the same errors fall through to runtime), and `tests/cases/typecheck.b
 well-typed program still runs and prints correctly.
 
 **Deferred:**
-- **v0.4.1** — emit typed bytecode (specialized int/float arithmetic opcodes) using the
-  resolved `Expr` types the checker now records. Kept separate so the working VM hot path is
-  untouched by the checker itself.
 - **Separate fix** — the v0.1 postfix `++`/`--` value semantics and switch-scope
   simplification (independent of typing).
+
+## v0.4.1 — Typed bytecode ✅ (done)
+
+The bytecode compiler now uses the `Expr` types the checker records to emit **int-specialized
+opcodes** on the arithmetic/comparison hot path: when both operands are statically `TY_INT`,
+`OP_IADD OP_ISUB OP_IMUL OP_IDIV OP_IMOD` and `OP_ILESS OP_ILESS_EQUAL OP_IGREATER
+OP_IGREATER_EQUAL` replace their generic forms (compiler.c, gated by `BK_NO_TYPED_OPS`). Each
+runs a branch-lean integer path with no type-tag dispatch.
+
+**Guarded with deopt.** Because brokm is gradually typed (`type_assignable(TY_INT, TY_FLOAT)` is
+true — a float may occupy a statically-int slot, e.g. `I64 c = 10.0 / 4.0;`), static `TY_INT` is
+a hint, not a runtime guarantee. So every specialized op carries a runtime `IS_INT` guard and
+**deopts** — `goto`s its generic counterpart — on a miss, preserving exact semantics (string
+concat for `+`, divide-by-zero error, int→float promotion). The guard is load-bearing, verified
+red/green: dropping the `IS_INT` check makes the float-in-int-slot case in
+`tests/cases/typed_ops.bk` print garbage; with it, `3.5`. The default and `-DBK_NO_TYPED_OPS`
+builds produce byte-identical output. Equality (`== !=`, any-value) and bitwise/shift (already
+integer-only generic paths) are not specialized — an easy future extension.
 
 ## v0.5 — Baseline JIT
 
