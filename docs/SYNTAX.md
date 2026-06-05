@@ -142,11 +142,34 @@ are your responsibility; that is the point of manual memory.
 ## Built-in functions
 
 - `Print(fmt, ...)` — same printf-style formatter as a bare string statement.
+- `PrintErr(fmt, ...)` — same, but writes to stderr.
 - `Len(x)` — element count of an array, or character count of a string.
 - `Append(array, value)` — grow an array by one element; returns the array.
 - `GcCollect()` — force a full (major) garbage collection (returns nil).
 - `GcMinor()` — force a minor (young-generation) collection (returns nil).
 - Manual-memory builtins above (`MAlloc`, `Free`, peek/poke, `GcDisable/Enable`).
+
+### Standard library (v0.6)
+
+Strings (HolyC keeps characters as integer codes):
+
+- `CharAt(s, i)` — char code at index `i`, or `-1` if out of range.
+- `Chr(code)` — a one-character string for `code`.
+- `Substr(s, start, len)` — substring (start/len clamped to bounds).
+- `IndexOf(s, sub)` — first index of `sub` in `s`, or `-1`.
+- `ToInt(x)` — parse a string (base 10), truncate a float, or pass an int.
+- `ToStr(x)` — render a value as a string.
+
+File I/O:
+
+- `ReadFile(path)` — the whole file as a string, or `NULL` if it cannot be opened.
+- `WriteFile(path, contents)` — write a string to a file; returns a `Bool`.
+
+Math (`Abs`/`Min`/`Max` preserve int-vs-float; the rest return `F64`):
+
+- `Abs(x)`, `Min(a, b)`, `Max(a, b)`, `Sqrt(x)`, `Pow(b, e)`, `Floor(x)`, `Ceil(x)`.
+
+See `examples/lexer.bk` for a tokenizer written in brokm using these.
 
 ## Control flow
 

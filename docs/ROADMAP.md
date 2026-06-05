@@ -168,10 +168,41 @@ with `-DBK_NO_JIT`, every function runs on the interpreter.
 omit their backtrace line); inlining bitwise/unary ops and aggregates; keeping `vm.stackTop` in a
 register across calls.
 
-## v0.6 — Embedding, stdlib, polish
+## v0.6 — Standard library ✅ (done) · embedding/polish (in progress)
 
-Richer `brokm.h` (register natives, exchange values, multi-instance VMs), a small standard
-library (math, strings, I/O), and a stable language spec.
+**Standard library ✅.** A set of native builtins (natives.c) covering the three areas a real
+program — and a self-hosting compiler — needs:
+
+- **File I/O:** `ReadFile(path)` → string (or nil), `WriteFile(path, str)` → `Bool`,
+  `PrintErr(...)` (printf-style, to stderr).
+- **Strings:** `CharAt(s, i)`, `Chr(code)`, `Substr(s, start, len)`, `IndexOf(s, sub)`,
+  `ToInt(s)`, `ToStr(x)`. Equality already works (strings are interned, so `==` compares
+  content).
+- **Math:** `Abs`, `Min`, `Max` (int-vs-float preserving), `Sqrt`, `Pow`, `Floor`, `Ceil`.
+
+String results go through the GC-safe `string_copy`/`string_take`; the builtins are registered
+with the type checker as gradual `TY_UNKNOWN` and need no VM/JIT changes (native calls from JIT'd
+code already route through `jit_h_call`). Verified byte-identical across the interpreter, forced
+JIT, and `-DBK_NO_JIT`, and under GC stress (`tests/cases/stdlib.bk`, `io.bk`).
+
+**Deferred to v0.6.x / v0.7:** a richer embedding API (register natives + exchange values from C),
+**multi-instance VMs** (replacing the global `VM vm` — a cross-cutting refactor), and a formal
+language spec.
+
+## Self-hosting (north star)
+
+Can brokm compile itself? Eventually, yes — and the v0.6 stdlib is the first step.
+`examples/lexer.bk` is a **tokenizer for brokm written in brokm**: it scans a source string with
+`CharAt`/`Substr`/`Len`, classifies identifiers/keywords/numbers/strings/operators, and prints
+each token. Its helper functions are JIT-compiled like any other.
+
+- **Already enough:** functions/recursion, arrays, classes/structs, manual memory, strings +
+  the new string/IO stdlib.
+- **Still needed:** a map/hash type (writable in-language, but a builtin would help symbol
+  tables), modules / multi-file programs, and methods (today: free functions over instances).
+- **Path:** lexer (done) → parser/AST in brokm → a code generator emitting the existing bytecode
+  (runnable on the current C VM), then — much later — a runtime in brokm, retiring the C
+  bootstrap. The baseline JIT matters here: a self-hosted compiler is compute-heavy.
 
 ## Language features tracked across milestones
 

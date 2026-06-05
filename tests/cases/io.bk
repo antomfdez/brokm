@@ -1,0 +1,15 @@
+// v0.6 file I/O: WriteFile -> ReadFile round-trip (self-contained, uses /tmp).
+U8 path = "/tmp/brokm_io_test.txt";
+U8 text = "line one\nline two\n";
+
+Bool wrote = WriteFile(path, text);
+"wrote = %d\n", wrote;
+
+U8 back = ReadFile(path);
+"len = %d\n", Len(back);
+"eq = %d\n", back == text;
+"contents:\n%s", back;
+
+// Reading a nonexistent file yields nil (NULL).
+U8 missing = ReadFile("/tmp/brokm_does_not_exist_xyz.txt");
+"missing is nil = %d\n", missing == NULL;

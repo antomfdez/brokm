@@ -1,0 +1,55 @@
+// lexer.bk — a tokenizer for brokm, written in brokm.
+//
+// The first concrete step toward self-hosting: it walks a source string with
+// the v0.6 string stdlib (CharAt / Substr / Len) and classifies each token.
+// Swap the inline `src` for `ReadFile("path.bk")` to tokenize a real file.
+
+// Character classes (brokm keeps chars as integer codes).
+I64 IsSpace(I64 c) { return c == 32 || c == 9 || c == 10 || c == 13; }
+I64 IsDigit(I64 c) { return c >= 48 && c <= 57; }
+I64 IsAlpha(I64 c)
+{
+  return (c >= 97 && c <= 122) || (c >= 65 && c <= 90) || c == 95;
+}
+
+I64 IsKeyword(U8 w)
+{
+  return w == "I64" || w == "F64" || w == "U0" || w == "Bool" ||
+         w == "if" || w == "else" || w == "while" || w == "for" ||
+         w == "return" || w == "class";
+}
+
+U8 src = "I64 fib = 42;\nif (fib > 10) \"big\";";
+
+"-- source --\n%s\n\n-- tokens --\n", src;
+
+I64 n = Len(src);
+I64 i = 0;
+while (i < n)
+{
+  I64 c = CharAt(src, i);
+
+  if (IsSpace(c)) {
+    i = i + 1;
+  } else if (IsDigit(c)) {
+    I64 start = i;
+    while (i < n && IsDigit(CharAt(src, i))) i = i + 1;
+    "NUMBER   %s\n", Substr(src, start, i - start);
+  } else if (IsAlpha(c)) {
+    I64 start = i;
+    // identifiers continue with letters or digits (so "I64", "x2" are one token)
+    while (i < n && (IsAlpha(CharAt(src, i)) || IsDigit(CharAt(src, i)))) i = i + 1;
+    U8 word = Substr(src, start, i - start);
+    if (IsKeyword(word)) "KEYWORD  %s\n", word;
+    else "IDENT    %s\n", word;
+  } else if (c == 34) { // opening double quote
+    I64 start = i;
+    i = i + 1;
+    while (i < n && CharAt(src, i) != 34) i = i + 1;
+    i = i + 1; // consume the closing quote
+    "STRING   %s\n", Substr(src, start, i - start);
+  } else {
+    "OP       %s\n", Substr(src, i, 1);
+    i = i + 1;
+  }
+}

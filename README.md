@@ -5,11 +5,12 @@ language with a clean [HolyC](https://en.wikipedia.org/wiki/TempleOS#HolyC)-flav
 It is built primarily for its author's own use, with four design goals: **small, fast, robust,
 and easy to embed**.
 
-This is **v0.5**: a working bytecode VM with a precise, **generational** mark-sweep garbage
+This is **v0.6**: a working bytecode VM with a precise, **generational** mark-sweep garbage
 collector, aggregate types (arrays + classes/structs), an opt-in **manual-memory** mode for
 low-level work, a **static type checker** that validates the HolyC type annotations before
-any code runs, **typed bytecode** that specializes the int hot path, and a **baseline JIT** that
-compiles hot functions to native arm64 code (with a full interpreter fallback)
+any code runs, **typed bytecode** that specializes the int hot path, a **baseline JIT** that
+compiles hot functions to native arm64 code (with a full interpreter fallback), and a **standard
+library** (file I/O, strings, math) — enough to write a [brokm tokenizer in brokm](examples/lexer.bk)
 (see [docs/ROADMAP.md](docs/ROADMAP.md)).
 
 ```holyc
@@ -89,7 +90,11 @@ typing stays correct. Finally, a **baseline JIT** (arm64/macOS) compiles hot fun
 code in `mmap`'d executable pages — profile-gated, with inlined integer arithmetic/comparisons,
 branches, and recursion, deopt guards for correctness, and a full interpreter fallback for
 ineligible functions and every other platform. It runs the recursive `Fib` benchmark ~2× faster
-than the interpreter (`make bench`). Next up: an x64 backend and a stdlib — see the roadmap.
+than the interpreter (`make bench`). A **standard library** of native builtins covers file I/O
+(`ReadFile`/`WriteFile`/`PrintErr`), strings (`CharAt`/`Chr`/`Substr`/`IndexOf`/`ToInt`/`ToStr`),
+and math (`Abs`/`Min`/`Max`/`Sqrt`/`Pow`/`Floor`/`Ceil`) — enough that `examples/lexer.bk`
+tokenizes brokm source written in brokm, the first step toward self-hosting. Next up: a richer
+embedding API and multi-instance VMs — see the roadmap.
 
 ## License
 

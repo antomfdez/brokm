@@ -161,10 +161,14 @@ static void register_natives(void) {
   /* Names from natives_register() in natives.c. All variadic, TY_UNKNOWN
    * result, so calls to them are never flagged. */
   static const char *NAMES[] = {
-      "Print",  "GcCollect", "GcMinor", "GcDisable", "GcEnable",
-      "Len",    "Append",    "MAlloc",  "Free",      "PeekU8",
-      "PokeU8", "PeekI64",   "PokeI64", "PeekF64",   "PokeF64",
+      "Print",  "PrintErr",  "GcCollect", "GcMinor", "GcDisable", "GcEnable",
+      "Len",    "Append",    "MAlloc",    "Free",    "PeekU8",
+      "PokeU8", "PeekI64",   "PokeI64",   "PeekF64", "PokeF64",
       "PeekPtr", "PokePtr",
+      /* v0.6 standard library */
+      "CharAt", "Chr",       "Substr",    "IndexOf", "ToInt",     "ToStr",
+      "ReadFile", "WriteFile",
+      "Abs",    "Min",       "Max",       "Sqrt",    "Pow",       "Floor", "Ceil",
   };
   size_t n = sizeof(NAMES) / sizeof(NAMES[0]);
   for (size_t i = 0; i < n; i++) {

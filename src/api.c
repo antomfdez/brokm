@@ -5,7 +5,7 @@
 #include "brokm.h"
 #include "vm.h"
 
-#define BROKM_VERSION "0.1.0"
+#define BROKM_VERSION "0.6.0"
 
 void brokm_init(void) { vm_init(); }
 void brokm_shutdown(void) { vm_free(); }

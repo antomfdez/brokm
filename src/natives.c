@@ -1,4 +1,6 @@
-/* natives.c - the Print formatter and native registration. */
+/* natives.c - the Print formatter, the standard library, and native
+ * registration. */
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -22,23 +24,39 @@ static F64 to_f64(Value v) {
   return 0.0;
 }
 
+/* Mirror value_print to an arbitrary stream (for the no-format-string path). */
+static void fprint_value(FILE *out, Value v) {
+  switch (v.type) {
+    case VAL_NIL:   fputs("nil", out); break;
+    case VAL_BOOL:  fputs(AS_BOOL(v) ? "TRUE" : "FALSE", out); break;
+    case VAL_INT:   fprintf(out, "%lld", (long long)AS_INT(v)); break;
+    case VAL_FLOAT: fprintf(out, "%g", AS_FLOAT(v)); break;
+    case VAL_OBJ:
+      if (IS_STRING(v)) fputs(AS_CSTRING(v), out);
+      else value_print(v);
+      break;
+    case VAL_PTR:   fputs(AS_PTR(v) != NULL ? "<ptr>" : "NULL", out); break;
+    default:        fputs("<unknown>", out); break;
+  }
+}
+
 /* `flags` holds everything between '%' and the conversion char (width,
  * precision, flags). brokm integers are 64-bit, so signed/unsigned integer
  * conversions inject the `ll` length modifier. */
-static void print_spec(const char *flags, char conv, Value v) {
+static void print_spec(FILE *out, const char *flags, char conv, Value v) {
   char fmt[48];
   switch (conv) {
     case 'd':
     case 'i':
       snprintf(fmt, sizeof(fmt), "%%%slld", flags);
-      printf(fmt, (long long)to_i64(v));
+      fprintf(out, fmt, (long long)to_i64(v));
       break;
     case 'u':
     case 'o':
     case 'x':
     case 'X':
       snprintf(fmt, sizeof(fmt), "%%%sll%c", flags, conv);
-      printf(fmt, (unsigned long long)to_i64(v));
+      fprintf(out, fmt, (unsigned long long)to_i64(v));
       break;
     case 'e':
     case 'E':
@@ -47,29 +65,31 @@ static void print_spec(const char *flags, char conv, Value v) {
     case 'g':
     case 'G':
       snprintf(fmt, sizeof(fmt), "%%%s%c", flags, conv);
-      printf(fmt, to_f64(v));
+      fprintf(out, fmt, to_f64(v));
       break;
     case 'c':
       snprintf(fmt, sizeof(fmt), "%%%sc", flags);
-      printf(fmt, (int)to_i64(v));
+      fprintf(out, fmt, (int)to_i64(v));
       break;
     case 's':
       snprintf(fmt, sizeof(fmt), "%%%ss", flags);
-      printf(fmt, IS_STRING(v) ? AS_CSTRING(v) : "");
+      fprintf(out, fmt, IS_STRING(v) ? AS_CSTRING(v) : "");
       break;
     default:
-      putchar(conv);
+      fputc(conv, out);
       break;
   }
 }
 
-Value bk_format(int argc, Value *args) {
+/* printf-style formatting to `out`. bk_format() is the stdout wrapper used by
+ * OP_PRINT and Print(); PrintErr() targets stderr. */
+static Value bk_format_to(FILE *out, int argc, Value *args) {
   if (argc == 0) return NIL_VAL;
 
   if (!IS_STRING(args[0])) {
     for (int i = 0; i < argc; i++) {
-      if (i > 0) putchar(' ');
-      value_print(args[i]);
+      if (i > 0) fputc(' ', out);
+      fprint_value(out, args[i]);
     }
     return NIL_VAL;
   }
@@ -78,12 +98,12 @@ Value bk_format(int argc, Value *args) {
   int ai = 1;
   for (const char *p = fmt; *p != '\0'; p++) {
     if (*p != '%') {
-      putchar(*p);
+      fputc(*p, out);
       continue;
     }
     p++;
     if (*p == '%') {
-      putchar('%');
+      fputc('%', out);
       continue;
     }
     char flags[32];
@@ -94,12 +114,17 @@ Value bk_format(int argc, Value *args) {
     flags[f] = '\0';
     if (*p == '\0') break;
     Value v = (ai < argc) ? args[ai++] : NIL_VAL;
-    print_spec(flags, *p, v);
+    print_spec(out, flags, *p, v);
   }
   return NIL_VAL;
 }
 
+Value bk_format(int argc, Value *args) { return bk_format_to(stdout, argc, args); }
+
 static Value native_print(int argc, Value *args) { return bk_format(argc, args); }
+static Value native_print_err(int argc, Value *args) {
+  return bk_format_to(stderr, argc, args);
+}
 
 /* Force a full (major) garbage collection. Returns nil. */
 static Value native_gc_collect(int argc, Value *args) {
@@ -240,8 +265,139 @@ static Value native_gc_enable(int argc, Value *args) {
   return NIL_VAL;
 }
 
+/* ---- standard library: strings -------------------------------------------
+ * HolyC keeps characters as integers, so CharAt/Chr bridge ints and 1-char
+ * strings. Returned strings go through string_copy, which is GC-safe (it
+ * protects the new string across interning). */
+
+/* CharAt(s, i) - byte/char code at index i, or -1 if out of range. */
+static Value native_char_at(int argc, Value *args) {
+  if (argc < 2 || !IS_STRING(args[0]) || !IS_INT(args[1])) return INT_VAL(-1);
+  ObjString *s = AS_STRING(args[0]);
+  I64 i = AS_INT(args[1]);
+  if (i < 0 || i >= s->length) return INT_VAL(-1);
+  return INT_VAL((I64)(U8)s->chars[i]);
+}
+
+/* Chr(code) - a one-character string for the given char code. */
+static Value native_chr(int argc, Value *args) {
+  char c = (char)(argc >= 1 && IS_INT(args[0]) ? AS_INT(args[0]) : 0);
+  return OBJ_VAL(string_copy(&c, 1));
+}
+
+/* Substr(s, start, len) - substring, with start/len clamped to bounds. */
+static Value native_substr(int argc, Value *args) {
+  if (argc < 3 || !IS_STRING(args[0]) || !IS_INT(args[1]) || !IS_INT(args[2])) {
+    return NIL_VAL;
+  }
+  ObjString *s = AS_STRING(args[0]);
+  I64 start = AS_INT(args[1]), len = AS_INT(args[2]);
+  if (start < 0) start = 0;
+  if (start > s->length) start = s->length;
+  if (len < 0) len = 0;
+  if (start + len > s->length) len = s->length - start;
+  return OBJ_VAL(string_copy(s->chars + start, (int)len));
+}
+
+/* IndexOf(s, sub) - first index of sub in s, or -1. */
+static Value native_index_of(int argc, Value *args) {
+  if (argc < 2 || !IS_STRING(args[0]) || !IS_STRING(args[1])) return INT_VAL(-1);
+  const char *hay = AS_CSTRING(args[0]);
+  const char *at = strstr(hay, AS_CSTRING(args[1]));
+  return INT_VAL(at != NULL ? (I64)(at - hay) : -1);
+}
+
+/* ToInt(x) - parse a string (base 10), truncate a float, or pass an int. */
+static Value native_to_int(int argc, Value *args) {
+  if (argc < 1) return INT_VAL(0);
+  if (IS_INT(args[0])) return args[0];
+  if (IS_FLOAT(args[0])) return INT_VAL((I64)AS_FLOAT(args[0]));
+  if (IS_STRING(args[0])) return INT_VAL((I64)strtoll(AS_CSTRING(args[0]), NULL, 10));
+  return INT_VAL(0);
+}
+
+/* ToStr(x) - render a value as a string (matches value_print formatting). */
+static Value native_to_str(int argc, Value *args) {
+  if (argc < 1) return OBJ_VAL(string_copy("", 0));
+  Value v = args[0];
+  if (IS_STRING(v)) return v;
+  char buf[32];
+  int n = 0;
+  switch (v.type) {
+    case VAL_INT:   n = snprintf(buf, sizeof(buf), "%lld", (long long)AS_INT(v)); break;
+    case VAL_FLOAT: n = snprintf(buf, sizeof(buf), "%g", AS_FLOAT(v)); break;
+    case VAL_BOOL:  return OBJ_VAL(string_copy(AS_BOOL(v) ? "TRUE" : "FALSE", AS_BOOL(v) ? 4 : 5));
+    case VAL_NIL:   return OBJ_VAL(string_copy("nil", 3));
+    default:        return OBJ_VAL(string_copy("", 0));
+  }
+  if (n < 0) n = 0;
+  if (n >= (int)sizeof(buf)) n = (int)sizeof(buf) - 1;
+  return OBJ_VAL(string_copy(buf, n));
+}
+
+/* ---- standard library: file I/O ------------------------------------------ */
+
+/* ReadFile(path) - whole file as a string, or nil if it cannot be opened. */
+static Value native_read_file(int argc, Value *args) {
+  if (argc < 1 || !IS_STRING(args[0])) return NIL_VAL;
+  FILE *f = fopen(AS_CSTRING(args[0]), "rb");
+  if (f == NULL) return NIL_VAL;
+  fseek(f, 0L, SEEK_END);
+  long size = ftell(f);
+  rewind(f);
+  if (size < 0) { fclose(f); return NIL_VAL; }
+  char *buf = (char *)malloc((size_t)size + 1);
+  if (buf == NULL) { fclose(f); return NIL_VAL; }
+  size_t rd = fread(buf, 1, (size_t)size, f);
+  fclose(f);
+  buf[rd] = '\0';
+  Value s = OBJ_VAL(string_copy(buf, (int)rd)); /* copies; GC-safe */
+  free(buf);
+  return s;
+}
+
+/* WriteFile(path, contents) - write a string to a file; true on success. */
+static Value native_write_file(int argc, Value *args) {
+  if (argc < 2 || !IS_STRING(args[0]) || !IS_STRING(args[1])) return BOOL_VAL(false);
+  FILE *f = fopen(AS_CSTRING(args[0]), "wb");
+  if (f == NULL) return BOOL_VAL(false);
+  ObjString *c = AS_STRING(args[1]);
+  size_t w = fwrite(c->chars, 1, (size_t)c->length, f);
+  fclose(f);
+  return BOOL_VAL(w == (size_t)c->length);
+}
+
+/* ---- standard library: math ----------------------------------------------
+ * Abs/Min/Max preserve int-vs-float; Sqrt/Pow/Floor/Ceil return F64. */
+
+static Value native_abs(int argc, Value *args) {
+  if (argc < 1) return INT_VAL(0);
+  if (IS_FLOAT(args[0])) return FLOAT_VAL(fabs(AS_FLOAT(args[0])));
+  return INT_VAL((I64)llabs((long long)to_i64(args[0])));
+}
+
+static Value native_min(int argc, Value *args) {
+  if (argc < 2) return argc >= 1 ? args[0] : NIL_VAL;
+  Value a = args[0], b = args[1];
+  if (IS_INT(a) && IS_INT(b)) return AS_INT(a) <= AS_INT(b) ? a : b;
+  return to_f64(a) <= to_f64(b) ? a : b;
+}
+
+static Value native_max(int argc, Value *args) {
+  if (argc < 2) return argc >= 1 ? args[0] : NIL_VAL;
+  Value a = args[0], b = args[1];
+  if (IS_INT(a) && IS_INT(b)) return AS_INT(a) >= AS_INT(b) ? a : b;
+  return to_f64(a) >= to_f64(b) ? a : b;
+}
+
+static Value native_sqrt(int argc, Value *args)  { return FLOAT_VAL(sqrt(argc >= 1 ? to_f64(args[0]) : 0.0)); }
+static Value native_pow(int argc, Value *args)   { return FLOAT_VAL(pow(argc >= 1 ? to_f64(args[0]) : 0.0, argc >= 2 ? to_f64(args[1]) : 0.0)); }
+static Value native_floor(int argc, Value *args) { return FLOAT_VAL(floor(argc >= 1 ? to_f64(args[0]) : 0.0)); }
+static Value native_ceil(int argc, Value *args)  { return FLOAT_VAL(ceil(argc >= 1 ? to_f64(args[0]) : 0.0)); }
+
 void natives_register(void) {
   vm_define_native("Print", native_print);
+  vm_define_native("PrintErr", native_print_err);
   vm_define_native("GcCollect", native_gc_collect);
   vm_define_native("GcMinor", native_gc_minor);
   vm_define_native("GcDisable", native_gc_disable);
@@ -258,4 +414,20 @@ void natives_register(void) {
   vm_define_native("PokeF64", native_poke_f64);
   vm_define_native("PeekPtr", native_peek_ptr);
   vm_define_native("PokePtr", native_poke_ptr);
+  /* v0.6 standard library */
+  vm_define_native("CharAt", native_char_at);
+  vm_define_native("Chr", native_chr);
+  vm_define_native("Substr", native_substr);
+  vm_define_native("IndexOf", native_index_of);
+  vm_define_native("ToInt", native_to_int);
+  vm_define_native("ToStr", native_to_str);
+  vm_define_native("ReadFile", native_read_file);
+  vm_define_native("WriteFile", native_write_file);
+  vm_define_native("Abs", native_abs);
+  vm_define_native("Min", native_min);
+  vm_define_native("Max", native_max);
+  vm_define_native("Sqrt", native_sqrt);
+  vm_define_native("Pow", native_pow);
+  vm_define_native("Floor", native_floor);
+  vm_define_native("Ceil", native_ceil);
 }

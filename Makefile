@@ -3,6 +3,7 @@ CC      ?= cc
 CFLAGS  ?= -std=c99 -Wall -Wextra -O2
 CFLAGS  += -Iinclude -Isrc
 LDFLAGS ?=
+LDFLAGS += -lm   # libm for the math stdlib (no-op on macOS, required on Linux)
 
 SRC := $(wildcard src/*.c)
 OBJ := $(SRC:.c=.o)

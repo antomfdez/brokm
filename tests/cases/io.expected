@@ -1,0 +1,7 @@
+wrote = 1
+len = 18
+eq = 1
+contents:
+line one
+line two
+missing is nil = 1
