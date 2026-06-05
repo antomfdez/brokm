@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>brokm — a small, fast, embeddable language</title>
+<meta name="description" content="brokm (broken minded) is a small, fast, embeddable general-purpose language with a HolyC-flavored syntax: a bytecode VM, generational GC, static type checker, and a baseline arm64 JIT.">
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --border: #30363d;
+    --fg: #e6edf3; --muted: #9aa7b2; --accent: #6ce3a0; --accent2: #6cb6ff;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  code, pre, .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
+  a { color: var(--accent2); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 20px; }
+
+  header { padding: 72px 0 40px; text-align: center; border-bottom: 1px solid var(--border); }
+  h1 { font-size: 3.2rem; margin: 0; letter-spacing: -1px; }
+  h1 .mono { color: var(--accent); }
+  .tag { color: var(--muted); font-size: 1.15rem; margin: 10px 0 0; }
+  .badges { margin-top: 22px; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+  .badge {
+    font-size: .8rem; padding: 4px 10px; border: 1px solid var(--border);
+    border-radius: 999px; color: var(--muted); background: var(--panel);
+  }
+  .cta { margin-top: 28px; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .btn {
+    display: inline-block; padding: 10px 18px; border-radius: 8px; font-weight: 600;
+    border: 1px solid var(--border);
+  }
+  .btn.primary { background: var(--accent); color: #062b18; border-color: var(--accent); }
+  .btn.primary:hover { text-decoration: none; filter: brightness(1.08); }
+  .btn.ghost:hover { text-decoration: none; border-color: var(--accent2); }
+
+  section { padding: 44px 0; border-bottom: 1px solid var(--border); }
+  h2 { font-size: 1.5rem; margin: 0 0 18px; }
+  pre {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 18px 20px; overflow-x: auto; font-size: .92rem; line-height: 1.55;
+  }
+  pre .c { color: var(--muted); }      /* comment */
+  pre .k { color: var(--accent2); }    /* keyword/type */
+  pre .s { color: var(--accent); }     /* string */
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; }
+  .card h3 { margin: 0 0 6px; font-size: 1.02rem; }
+  .card p { margin: 0; color: var(--muted); font-size: .92rem; }
+
+  ol.steps { padding-left: 0; list-style: none; counter-reset: s; }
+  ol.steps li { counter-increment: s; margin: 0 0 10px; padding-left: 34px; position: relative; }
+  ol.steps li::before {
+    content: counter(s); position: absolute; left: 0; top: 1px;
+    width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #062b18;
+    font: 700 .8rem/22px ui-monospace, monospace; text-align: center;
+  }
+  ol.steps code { background: var(--panel); border: 1px solid var(--border); padding: 1px 6px; border-radius: 5px; }
+
+  footer { padding: 36px 0 60px; text-align: center; color: var(--muted); font-size: .9rem; }
+  .note { color: var(--muted); font-size: .9rem; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <h1><span class="mono">brokm</span></h1>
+    <p class="tag">A small, fast, embeddable language with a HolyC-flavored syntax.</p>
+    <div class="badges">
+      <span class="badge">C99 · zero dependencies</span>
+      <span class="badge">bytecode VM</span>
+      <span class="badge">generational GC</span>
+      <span class="badge">static type checker</span>
+      <span class="badge">arm64 JIT</span>
+    </div>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/antomfdez/brokm">View on GitHub</a>
+      <a class="btn ghost" href="#start">Get started</a>
+    </div>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <h2>Hello, brokm</h2>
+<pre><span class="c">// hello.bk — top-level code runs; a bare string statement prints.</span>
+<span class="s">"Hello World\n"</span>;
+
+<span class="k">I64</span> Fib(<span class="k">I64</span> n)
+{
+  <span class="k">if</span> (n &lt; 2) <span class="k">return</span> n;
+  <span class="k">return</span> Fib(n - 1) + Fib(n - 2);
+}
+
+<span class="k">I64</span> i = 0;
+<span class="k">for</span> (i = 0; i &lt;= 10; ++i)
+  <span class="s">"Fib(%d) = %d\n"</span>, i, Fib(i);</pre>
+    <p class="note">Type-first declarations, top-level code (no <span class="mono">main()</span>), and HolyC-style
+      <span class="mono">"...";</span> printf-printing. Hot functions like <span class="mono">Fib</span> are
+      compiled to native arm64 code at runtime.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>What's inside</h2>
+    <div class="grid">
+      <div class="card"><h3>Bytecode VM</h3><p>A compact stack VM: lexer → parser/AST → bytecode compiler → interpreter.</p></div>
+      <div class="card"><h3>Generational GC</h3><p>Precise, non-moving mark-sweep with minor/major collections and a load-bearing write barrier.</p></div>
+      <div class="card"><h3>Aggregates</h3><p>Dynamic arrays and reference-semantics classes/structs with typed fields.</p></div>
+      <div class="card"><h3>Manual memory</h3><p>Opt-in <span class="mono">MAlloc</span>/<span class="mono">Free</span> with typed peek/poke for low-level work — GC-invisible.</p></div>
+      <div class="card"><h3>Static type checker</h3><p>Validates HolyC type annotations before execution; gradual, so existing code is unaffected.</p></div>
+      <div class="card"><h3>Baseline JIT</h3><p>Profile-gated arm64 code generation for hot functions, ~2× faster on recursion, with a full interpreter fallback.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="start">
+  <div class="wrap">
+    <h2>Get started</h2>
+    <p class="note">Requires a C99 compiler and <span class="mono">make</span> — no external dependencies.</p>
+    <ol class="steps">
+      <li><code>git clone https://github.com/antomfdez/brokm</code></li>
+      <li><code>cd brokm &amp;&amp; make</code> &nbsp;<span class="note">builds <span class="mono">./brokm</span> (0 warnings)</span></li>
+      <li><code>./brokm file.bk</code> &nbsp;<span class="note">run a program — or <code>./brokm</code> for the REPL</span></li>
+    </ol>
+<pre>make           <span class="c"># build ./brokm</span>
+make test      <span class="c"># run the golden test suite</span>
+make test-gc   <span class="c"># run it with the GC firing on every allocation</span>
+make bench     <span class="c"># benchmark the JIT against the interpreter</span></pre>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Embedding</h2>
+<pre><span class="k">#include</span> <span class="s">"brokm.h"</span>
+
+<span class="k">int</span> main(<span class="k">void</span>) {
+  brokm_init();
+  brokm_eval(<span class="s">"\"embedded!\\n\";"</span>);
+  brokm_shutdown();
+  <span class="k">return</span> 0;
+}</pre>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Documentation</h2>
+    <div class="grid">
+      <div class="card"><h3><a href="https://github.com/antomfdez/brokm/blob/main/docs/SYNTAX.md">Syntax reference</a></h3><p>The full language surface: types, declarations, control flow, operators.</p></div>
+      <div class="card"><h3><a href="https://github.com/antomfdez/brokm/blob/main/docs/ARCHITECTURE.md">Architecture</a></h3><p>How the pipeline, VM, and collector fit together.</p></div>
+      <div class="card"><h3><a href="https://github.com/antomfdez/brokm/blob/main/docs/ROADMAP.md">Roadmap</a></h3><p>Milestones from the VM through the JIT — and what's next.</p></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p><span class="mono">brokm</span> — "broken minded" · built in C99 · <a href="https://github.com/antomfdez/brokm">github.com/antomfdez/brokm</a></p>
+  </div>
+</footer>
+
+</body>
+</html>
