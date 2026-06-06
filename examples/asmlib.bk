@@ -1,0 +1,93 @@
+// asmlib.bk — a back-end that emits the C VM's REAL bytecode (self-hosting
+// step 4). Where complib.bk targets a toy in-language VM, this compiles the
+// SAME toy language to brokm's actual opcode format and runs it on the C VM
+// directly: `Assemble(code, consts)` hands back a real, callable function.
+//
+// It reuses complib.bk's front-end unchanged — tokenizer, parser, and the
+// Node/Stmt AST — and only swaps the code generator. Variables become real VM
+// globals (addressed by name through OP_DEFINE_GLOBAL / OP_GET_GLOBAL), so no
+// slot bookkeeping is needed.
+//
+// This is a LIBRARY (no top-level driver); see examples/realgen.bk for a demo.
+
+#include "complib.bk"   // Tok / Node / Stmt + Tokenize / Parse (front-end)
+
+// ---- real opcode numbers (the C VM's enum is the single source of truth) ---
+I64 ROP_CONSTANT      = Opcode("CONSTANT");
+I64 ROP_DEFINE_GLOBAL = Opcode("DEFINE_GLOBAL");
+I64 ROP_GET_GLOBAL    = Opcode("GET_GLOBAL");
+I64 ROP_ADD           = Opcode("ADD");
+I64 ROP_SUB           = Opcode("SUB");
+I64 ROP_MUL           = Opcode("MUL");
+I64 ROP_DIV           = Opcode("DIV");
+I64 ROP_MOD           = Opcode("MOD");
+I64 ROP_NEGATE        = Opcode("NEGATE");
+I64 ROP_PRINT         = Opcode("PRINT");
+I64 ROP_NIL           = Opcode("NIL");
+I64 ROP_RETURN        = Opcode("RETURN");
+
+// ---- emit buffers ----------------------------------------------------------
+// rcode collects the byte stream (opcodes + single-byte operands); rconsts is
+// the constant pool, indexed positionally to match the order it is built.
+U0[] rcode   = [];
+U0[] rconsts = [];
+
+I64 AddConst(U0 v)            { I64 i = Len(rconsts); Append(rconsts, v); return i; }
+U0  Emit(I64 op)             { Append(rcode, op); }
+U0  EmitArg(I64 op, I64 arg) { Append(rcode, op); Append(rcode, arg); }
+
+I64 RealBinOp(I64 c)
+{
+  if (c == 43) return ROP_ADD;   // '+'
+  if (c == 45) return ROP_SUB;   // '-'
+  if (c == 42) return ROP_MUL;   // '*'
+  if (c == 47) return ROP_DIV;   // '/'
+  return ROP_MOD;                // '%'
+}
+
+// ---- code generation: AST -> real bytecode ---------------------------------
+U0 GenExprReal(Node n)
+{
+  if (n.op == 256) { EmitArg(ROP_CONSTANT, AddConst(n.val)); return; }   // number
+  if (n.op == 257) { EmitArg(ROP_GET_GLOBAL, AddConst(n.name)); return; } // variable
+  if (n.op == 110) {                                                      // negate
+    GenExprReal(n.left);
+    Emit(ROP_NEGATE);
+    return;
+  }
+  GenExprReal(n.left);                                                    // binary
+  GenExprReal(n.right);
+  Emit(RealBinOp(n.op));
+}
+
+U0 GenStmtReal(Stmt s)
+{
+  if (s.kind == 0) {                          // name = expr  ->  define global
+    GenExprReal(s.expr);
+    EmitArg(ROP_DEFINE_GLOBAL, AddConst(s.name));
+  } else {                                    // print expr   ->  formatted print
+    EmitArg(ROP_CONSTANT, AddConst("%d\n"));  // format string, then the value
+    GenExprReal(s.expr);
+    EmitArg(ROP_PRINT, 2);
+  }
+}
+
+// Compile a statement list into a callable function that runs on the C VM.
+// The chunk ends with NIL + RETURN, exactly as the C compiler terminates a
+// top-level script.
+U0 CompileStmts(U0[] stmts)
+{
+  rcode   = [];
+  rconsts = [];
+  I64 i = 0;
+  while (i < Len(stmts)) {
+    GenStmtReal(stmts[i]);
+    i = i + 1;
+  }
+  Emit(ROP_NIL);
+  Emit(ROP_RETURN);
+  return Assemble(rcode, rconsts);
+}
+
+// Convenience: source text -> callable function.
+U0 CompileSource(U8 src) { return CompileStmts(Parse(src)); }

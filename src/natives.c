@@ -456,6 +456,67 @@ static Value native_pow(int argc, Value *args)   { return FLOAT_VAL(pow(argc >= 
 static Value native_floor(int argc, Value *args) { return FLOAT_VAL(floor(argc >= 1 ? to_f64(args[0]) : 0.0)); }
 static Value native_ceil(int argc, Value *args)  { return FLOAT_VAL(ceil(argc >= 1 ? to_f64(args[0]) : 0.0)); }
 
+/* ---- self-hosting: emit and run the C VM's real bytecode ------------------
+ * These let a brokm program act as a back-end for this very VM. Opcode(name)
+ * resolves a mnemonic to its integer OpCode (the enum in chunk.h is the single
+ * source of truth), so brokm-generated code stays correct if the enum changes.
+ * Assemble(code, consts) turns a byte array plus a constant-pool array into a
+ * real, callable ObjFunction whose Chunk runs on this VM directly. */
+static const struct { const char *name; int op; } OPCODE_TABLE[] = {
+    {"CONSTANT", OP_CONSTANT}, {"NIL", OP_NIL}, {"TRUE", OP_TRUE},
+    {"FALSE", OP_FALSE}, {"POP", OP_POP}, {"DEFINE_GLOBAL", OP_DEFINE_GLOBAL},
+    {"GET_GLOBAL", OP_GET_GLOBAL}, {"SET_GLOBAL", OP_SET_GLOBAL},
+    {"GET_LOCAL", OP_GET_LOCAL}, {"SET_LOCAL", OP_SET_LOCAL},
+    {"EQUAL", OP_EQUAL}, {"NOT_EQUAL", OP_NOT_EQUAL}, {"GREATER", OP_GREATER},
+    {"GREATER_EQUAL", OP_GREATER_EQUAL}, {"LESS", OP_LESS},
+    {"LESS_EQUAL", OP_LESS_EQUAL}, {"ADD", OP_ADD}, {"SUB", OP_SUB},
+    {"MUL", OP_MUL}, {"DIV", OP_DIV}, {"MOD", OP_MOD}, {"NEGATE", OP_NEGATE},
+    {"NOT", OP_NOT}, {"BIT_AND", OP_BIT_AND}, {"BIT_OR", OP_BIT_OR},
+    {"BIT_XOR", OP_BIT_XOR}, {"BIT_NOT", OP_BIT_NOT}, {"SHL", OP_SHL},
+    {"SHR", OP_SHR}, {"JUMP", OP_JUMP}, {"JUMP_IF_FALSE", OP_JUMP_IF_FALSE},
+    {"JUMP_IF_TRUE", OP_JUMP_IF_TRUE}, {"LOOP", OP_LOOP}, {"CALL", OP_CALL},
+    {"PRINT", OP_PRINT}, {"ARRAY", OP_ARRAY}, {"INDEX_GET", OP_INDEX_GET},
+    {"INDEX_SET", OP_INDEX_SET}, {"GET_FIELD", OP_GET_FIELD},
+    {"SET_FIELD", OP_SET_FIELD}, {"INVOKE", OP_INVOKE}, {"RETURN", OP_RETURN},
+};
+
+static Value native_opcode(int argc, Value *args) {
+  if (argc < 1 || !IS_STRING(args[0])) return INT_VAL(-1);
+  const char *name = AS_CSTRING(args[0]);
+  int count = (int)(sizeof(OPCODE_TABLE) / sizeof(OPCODE_TABLE[0]));
+  for (int i = 0; i < count; i++) {
+    if (strcmp(name, OPCODE_TABLE[i].name) == 0) {
+      return INT_VAL(OPCODE_TABLE[i].op);
+    }
+  }
+  return INT_VAL(-1);
+}
+
+/* Assemble(code, consts) -> callable ObjFunction. `code` is an array of bytes
+ * (opcodes and single-byte operands); `consts` is the constant pool, indexed
+ * positionally to match the array order the brokm codegen built. The function
+ * is marked jitDisabled: dynamically assembled bytecode is run-once and is not
+ * worth (nor safe to blindly walk for) JIT compilation. */
+static Value native_assemble(int argc, Value *args) {
+  if (argc < 2 || !IS_ARRAY(args[0]) || !IS_ARRAY(args[1])) return NIL_VAL;
+  ValueArray *code = &AS_ARRAY(args[0])->elements;
+  ValueArray *consts = &AS_ARRAY(args[1])->elements;
+
+  ObjFunction *fn = function_new();
+  vm_push(OBJ_VAL(fn)); /* root across name interning + chunk growth */
+  fn->name = string_copy("<asm>", 5);
+  for (int i = 0; i < consts->count; i++) {
+    chunk_add_constant(&fn->chunk, consts->values[i]);
+  }
+  for (int i = 0; i < code->count; i++) {
+    I64 byte = IS_INT(code->values[i]) ? AS_INT(code->values[i]) : 0;
+    chunk_write(&fn->chunk, (U8)byte, 0);
+  }
+  fn->jitDisabled = true;
+  vm_pop();
+  return OBJ_VAL(fn);
+}
+
 void natives_register(void) {
   vm_define_native("Print", native_print);
   vm_define_native("PrintErr", native_print_err);
@@ -498,4 +559,6 @@ void natives_register(void) {
   vm_define_native("Pow", native_pow);
   vm_define_native("Floor", native_floor);
   vm_define_native("Ceil", native_ceil);
+  vm_define_native("Opcode", native_opcode);
+  vm_define_native("Assemble", native_assemble);
 }
