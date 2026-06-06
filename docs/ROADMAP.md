@@ -363,11 +363,20 @@ Can brokm compile itself? Eventually, yes — and brokm now hosts the front-end 
   instead of 120). `tests/cases/selfhost5.bk` checks cases that are only correct with per-call
   locals — a temporary surviving a second recursive call, and a value read after a recursive call —
   with **no C changes** at all. Top-level variables remain globals, matching brokm.
+- **Step 8 — arrays ✅.** `examples/realcc.bk` gained **aggregates**: array literals `[...]`,
+  indexing `a[i]` (get and set), and **expression statements**, which — because the call path already
+  resolves globals — let a toy program call brokm's native stdlib (`Append`, `Len`, …) directly. It
+  emits real `OP_ARRAY` / `OP_INDEX_GET` / `OP_INDEX_SET`, again with **no C changes**. Statement
+  parsing was generalized: an expression is parsed, and a following `=` marks it an assignment (a
+  variable or an index target), otherwise it is a bare expression statement.
+  `tests/cases/selfhost6.bk` builds and mutates arrays, grows one with `Append`, and runs a bubble
+  sort (nested loops + index get/set + a swap temporary) — byte-identical on the interpreter, the
+  JIT, and under GC stress (arrays are heap objects exercising the write barrier).
 - **Path:** lexer ✅ → parser/AST ✅ → code generator ✅ → real bytecode ✅ → control flow ✅ →
-  functions ✅ → locals ✅. The in-brokm compiler is now a real, if small, language back-end. Next,
-  grow the source language toward brokm's own (types, aggregates, strings) and feed it brokm source,
-  then — much later — a runtime in brokm, retiring the C bootstrap. The baseline JIT matters here: a
-  self-hosted compiler is compute-heavy.
+  functions ✅ → locals ✅ → arrays ✅. The in-brokm compiler is now a real, if small, language
+  back-end with the native stdlib in reach. Next, grow the source language toward brokm's own (type
+  annotations, strings, structs) and feed it brokm source, then — much later — a runtime in brokm,
+  retiring the C bootstrap. The baseline JIT matters here: a self-hosted compiler is compute-heavy.
 
 ## Language features tracked across milestones
 

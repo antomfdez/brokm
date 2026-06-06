@@ -35,13 +35,16 @@
 //   262 func, 263 return, 0 EOF, two-char ops 280 `==` 281 `!=` 282 `<=`
 //   283 `>=`, else op char code.
 class Tok  { I64 kind; I64 val; U8 name; }
-// Node.op: 256 number, 257 variable, 110 negate, 300 call, else binary op code.
-//   For a call, `name` is the callee and `args` holds the argument Nodes.
+// Node.op: 256 number, 257 variable, 110 negate, 300 call, 301 array literal,
+//   302 index (left[right]), else binary op code. For a call, `name` is the
+//   callee and `args` the argument Nodes; for an array literal, `args` holds the
+//   element Nodes.
 class Node { I64 op; I64 val; U8 name; Node left; Node right; U0[] args; }
-// Stmt.kind: 0 assign, 1 print, 2 if, 3 while, 4 return, 5 func.
+// Stmt.kind: 0 assign, 1 print, 2 if, 3 while, 4 return, 5 func, 6 index-set
+//   (expr = target index node, expr2 = value), 7 expression statement.
 //   thenB/elseB hold Stmt lists (body / else-body); params holds a func's
 //   parameter-name list.
-class Stmt { I64 kind; U8 name; Node expr; U0[] thenB; U0[] elseB; U0[] params; }
+class Stmt { I64 kind; U8 name; Node expr; U0[] thenB; U0[] elseB; U0[] params; Node expr2; }
 
 // ---- character classes -----------------------------------------------------
 I64 IsSpace(I64 c) { return c == 32 || c == 9 || c == 10 || c == 13; }
@@ -103,6 +106,8 @@ Node MakeVar(U8 name)                { return Node(257, 0, name, NULL, NULL, NUL
 Node MakeNeg(Node c)                 { return Node(110, 0, NULL, c, NULL, NULL); }
 Node MakeBin(I64 op, Node l, Node r) { return Node(op, 0, NULL, l, r, NULL); }
 Node MakeCall(U8 name, U0[] args)    { return Node(300, 0, name, NULL, NULL, args); }
+Node MakeArray(U0[] elems)           { return Node(301, 0, NULL, NULL, NULL, elems); }
+Node MakeIndex(Node b, Node idx)     { return Node(302, 0, NULL, b, idx, NULL); }
 
 I64 IsCompare(I64 k) {
   return k == 60 || k == 62 || k == 280 || k == 281 || k == 282 || k == 283;
@@ -110,7 +115,7 @@ I64 IsCompare(I64 k) {
 
 Node ParseExpr();   // forward declaration
 
-Node ParseFactor()
+Node ParsePrimary()
 {
   Tok t = toks[pos];
   if (t.kind == 256) { Advance(); return MakeNum(t.val); }
@@ -128,9 +133,31 @@ Node ParseFactor()
     }
     return MakeVar(t.name);
   }
+  if (t.kind == 91) {                       // array literal:  [ e1, e2, ... ]
+    Advance();
+    U0[] elems = [];
+    if (PeekKind() != 93) {
+      Append(elems, ParseExpr());
+      while (PeekKind() == 44) { Advance(); Append(elems, ParseExpr()); }
+    }
+    Advance();                              // ']'
+    return MakeArray(elems);
+  }
   if (t.kind == 40)  { Advance(); Node e = ParseExpr(); Advance(); return e; } // ( )
   if (t.kind == 45)  { Advance(); return MakeNeg(ParseFactor()); }             // unary -
   return MakeNum(0);
+}
+
+Node ParseFactor()
+{
+  Node base = ParsePrimary();
+  while (PeekKind() == 91) {                 // postfix indexing:  base[idx]
+    Advance();
+    Node idx = ParseExpr();
+    Advance();                               // ']'
+    base = MakeIndex(base, idx);
+  }
+  return base;
 }
 
 Node ParseTerm()
@@ -223,12 +250,19 @@ Stmt ParseStmt()
     Advance();                             // ';'
     return Stmt(1, NULL, e, NULL, NULL, NULL);
   }
-  U8 name = toks[pos].name;                // name = expr ;
-  Advance();                               // ident
-  Advance();                               // '='
-  Node e = ParseExpr();
-  Advance();                               // ';'
-  return Stmt(0, name, e, NULL, NULL, NULL);
+  // Assignment or expression statement. Parse an expression; if '=' follows it
+  // was an lvalue (a variable or an index target), otherwise it is a bare
+  // expression statement (e.g. a call whose result is discarded).
+  Node lhs = ParseExpr();
+  if (PeekKind() == 61) {                   // '=' assignment
+    Advance();
+    Node rhs = ParseExpr();
+    Advance();                              // ';'
+    if (lhs.op == 257) return Stmt(0, lhs.name, rhs, NULL, NULL, NULL, NULL);  // variable
+    return Stmt(6, NULL, lhs, NULL, NULL, NULL, rhs);                          // index target
+  }
+  Advance();                                // ';'
+  return Stmt(7, NULL, lhs, NULL, NULL, NULL, NULL);                           // expression stmt
 }
 
 U0[] Parse(U8 src)
@@ -261,6 +295,9 @@ I64 ROP_NOT_EQUAL     = Opcode("NOT_EQUAL");
 I64 ROP_PRINT         = Opcode("PRINT");
 I64 ROP_POP           = Opcode("POP");
 I64 ROP_CALL          = Opcode("CALL");
+I64 ROP_ARRAY         = Opcode("ARRAY");
+I64 ROP_INDEX_GET     = Opcode("INDEX_GET");
+I64 ROP_INDEX_SET     = Opcode("INDEX_SET");
 I64 ROP_JUMP          = Opcode("JUMP");
 I64 ROP_JUMP_IF_FALSE = Opcode("JUMP_IF_FALSE");
 I64 ROP_LOOP          = Opcode("LOOP");
@@ -366,6 +403,18 @@ U0 GenExpr(Node n)
     EmitArg(ROP_CALL, Len(n.args));
     return;
   }
+  if (n.op == 301) {                          // array literal: elements, OP_ARRAY
+    I64 i = 0;
+    while (i < Len(n.args)) { GenExpr(n.args[i]); i = i + 1; }
+    EmitArg(ROP_ARRAY, Len(n.args));
+    return;
+  }
+  if (n.op == 302) {                          // index get: array, index, INDEX_GET
+    GenExpr(n.left);
+    GenExpr(n.right);
+    Emit(ROP_INDEX_GET);
+    return;
+  }
   GenExpr(n.left);
   GenExpr(n.right);
   Emit(BinOpcode(n.op));
@@ -415,6 +464,19 @@ U0 GenStmt(Stmt s)
   if (s.kind == 4) {                          // return expr
     GenExpr(s.expr);
     Emit(ROP_RETURN);
+    return;
+  }
+  if (s.kind == 6) {                          // target[index] = value
+    GenExpr(s.expr.left);                     // array
+    GenExpr(s.expr.right);                    // index
+    GenExpr(s.expr2);                         // value
+    Emit(ROP_INDEX_SET);
+    Emit(ROP_POP);                            // INDEX_SET leaves the value
+    return;
+  }
+  if (s.kind == 7) {                          // expression statement: discard result
+    GenExpr(s.expr);
+    Emit(ROP_POP);
     return;
   }
   // s.kind == 5: func definition -> assemble its own chunk, bind as a global

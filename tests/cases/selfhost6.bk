@@ -1,0 +1,44 @@
+// selfhost6.bk — self-hosting step 8: AGGREGATES (arrays) in the in-brokm
+// real-bytecode compiler. The toy language gained array literals `[...]`,
+// indexing `a[i]` (get and set), and — via generalized expression statements —
+// the ability to call brokm's native stdlib (`Append`, `Len`) directly, since
+// the call path already resolves globals. Emits real OP_ARRAY / OP_INDEX_GET /
+// OP_INDEX_SET. #includes the compiler across directories.
+//
+// The program builds and mutates arrays, grows one with Append, and runs a
+// bubble sort (nested loops + index get/set + a local temp for the swap).
+// Expected output: 3, 99, 3 (a[0], a[1]:=99, Len), 30 (Append'd sum),
+// then the sorted array 1 2 3 5 8 9.
+#include "../../examples/realcc.bk"
+
+U0 prog = Compile("
+  a = [3, 1, 2];
+  print a[0];
+  a[1] = 99;
+  print a[1];
+  print Len(a);
+
+  b = [];
+  Append(b, 10);
+  Append(b, 20);
+  print b[0] + b[1];
+
+  func bsort(a, n) {
+    i = 0;
+    while (i < n) {
+      j = 0;
+      while (j < n - 1 - i) {
+        if (a[j] > a[j + 1]) { t = a[j]; a[j] = a[j + 1]; a[j + 1] = t; }
+        j = j + 1;
+      }
+      i = i + 1;
+    }
+    return a;
+  }
+
+  arr = [5, 2, 8, 1, 9, 3];
+  bsort(arr, 6);
+  k = 0;
+  while (k < 6) { print arr[k]; k = k + 1; }
+");
+prog();
