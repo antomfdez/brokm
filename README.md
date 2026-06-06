@@ -13,7 +13,8 @@ annotations before any code runs, **typed bytecode** that specializes the int ho
 interpreter fallback), a **standard library** (file I/O, strings, math), **string-keyed maps**,
 a **C embedding API** (register natives, exchange values, call brokm from C), and **multi-file
 programs** via `#include` — enough to write a
-[brokm tokenizer and parser in brokm](examples/calc.bk) (see [docs/ROADMAP.md](docs/ROADMAP.md)).
+[small compiler in brokm](examples/complib.bk) that emits and runs its own stack bytecode
+(see [docs/ROADMAP.md](docs/ROADMAP.md)).
 
 ```holyc
 // hello.bk — top-level code runs; a bare string statement prints.
@@ -122,7 +123,10 @@ red/green. Classes carry **methods** (`obj.m(args)` with an implicit `this`, dis
 new `OP_INVOKE`), so a compiler's data types can hold behavior. A **C embedding API** lets a host
 register native functions, exchange scalar and string values, read/set globals, and call brokm
 functions from C (`examples/embed.c`). **`#include`** splits a program across files — textual,
-include-once, resolved relative to each file. Next up: multi-instance VMs — see the roadmap.
+include-once, resolved relative to each file. Putting it together, **`examples/complib.bk` is a
+small compiler written in brokm** (lex → parse → symbol-table map → **stack bytecode** → a
+bytecode VM in `MAlloc`'d memory) — self-hosting step 3, runnable identically on the interpreter
+and the JIT. Next up: targeting the C VM's real opcodes, then multi-instance VMs — see the roadmap.
 
 ## License
 

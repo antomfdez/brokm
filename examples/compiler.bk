@@ -1,0 +1,25 @@
+// compiler.bk — demo driver for the brokm-in-brokm compiler (self-hosting
+// step 3). It #includes the compiler library and compiles + runs a sample
+// program, showing the generated stack bytecode and verifying that running the
+// bytecode agrees with a direct tree-walk of the AST.
+//
+// Run:  ./brokm examples/compiler.bk
+#include "complib.bk"
+
+U8 SRC = "x = 2 + 3 * 4;\ny = (x - 2) * 5;\nprint x;\nprint y;\nprint -x + 100;\nprint y % 7;\n";
+
+"=== source ===\n%s\n", SRC;
+
+U0[] prog = Compile(Parse(SRC));
+
+"=== bytecode (%d slots) ===\n", nslots;
+Disasm(prog);
+
+"=== output ===\n";
+U0[] outs = Run(prog);
+I64 i = 0;
+for (i = 0; i < Len(outs); i = i + 1) "%d\n", outs[i];
+
+// Verify the generated code against a direct interpreter.
+U0[] ref = Interp(Parse(SRC));
+"=== codegen == tree-walk: %d ===\n", SameInts(outs, ref);

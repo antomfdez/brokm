@@ -1,0 +1,27 @@
+slots = 2, instrs = 21
+  0  PUSH   6
+  1  PUSH   7
+  2  MUL
+  3  STORE  0
+  4  LOAD   0
+  5  PUSH   2
+  6  SUB
+  7  STORE  1
+  8  LOAD   0
+  9  PRINT
+ 10  LOAD   1
+ 11  PRINT
+ 12  LOAD   0
+ 13  LOAD   1
+ 14  ADD
+ 15  PUSH   4
+ 16  DIV
+ 17  PRINT
+ 18  LOAD   1
+ 19  NEG
+ 20  PRINT
+out 0 = 42
+out 1 = 40
+out 2 = 20
+out 3 = -40
+match = 1

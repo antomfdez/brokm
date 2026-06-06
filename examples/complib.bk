@@ -1,0 +1,336 @@
+// complib.bk — a small compiler written in brokm (self-hosting step 3).
+//
+// Pipeline: source text -> tokens -> AST -> (symbol table) -> stack bytecode ->
+// a bytecode VM that runs it. It dogfoods classes, self-referential class types,
+// arrays, the string stdlib, MAPS (symbol table), and MANUAL MEMORY (the VM's
+// operand stack and variable store live in MAlloc'd buffers).
+//
+// The toy language: statements `name = expr;` and `print expr;`, with integer
+// expressions over `+ - * / %`, unary `-`, parentheses, and variables.
+//
+// This file is a LIBRARY (no top-level driver), meant to be #included. See
+// examples/compiler.bk for a runnable demo.
+
+// ---- token / AST / instruction types ---------------------------------------
+// Tok.kind: 256 number, 257 identifier, 258 `print`, 0 EOF, else op char code.
+class Tok  { I64 kind; I64 val; U8 name; }
+// Node.op: 256 number, 257 variable, 110 negate, else binary op char code.
+class Node { I64 op; I64 val; U8 name; Node left; Node right; }
+// Stmt.kind: 0 assignment (name = expr), 1 print (expr).
+class Stmt { I64 kind; U8 name; Node expr; }
+// One stack-machine instruction.
+class Instr { I64 op; I64 arg; }
+
+// Opcodes.
+I64 OP_PUSH  = 0;
+I64 OP_LOAD  = 1;
+I64 OP_STORE = 2;
+I64 OP_ADD   = 3;
+I64 OP_SUB   = 4;
+I64 OP_MUL   = 5;
+I64 OP_DIV   = 6;
+I64 OP_MOD   = 7;
+I64 OP_NEG   = 8;
+I64 OP_PRINT = 9;
+
+// ---- character classes -----------------------------------------------------
+I64 IsSpace(I64 c) { return c == 32 || c == 9 || c == 10 || c == 13; }
+I64 IsDigit(I64 c) { return c >= 48 && c <= 57; }
+I64 IsAlpha(I64 c) {
+  return (c >= 97 && c <= 122) || (c >= 65 && c <= 90) || c == 95;
+}
+I64 IsAlnum(I64 c) { return IsAlpha(c) || IsDigit(c); }
+
+// ---- tokenizer: source string -> array of Tok (with a 0/EOF sentinel) ------
+U0[] Tokenize(U8 src)
+{
+  U0[] out = [];
+  I64 n = Len(src);
+  I64 i = 0;
+  while (i < n) {
+    I64 c = CharAt(src, i);
+    if (IsSpace(c)) {
+      i = i + 1;
+    } else if (IsDigit(c)) {
+      I64 start = i;
+      while (i < n && IsDigit(CharAt(src, i))) i = i + 1;
+      Append(out, Tok(256, ToInt(Substr(src, start, i - start)), NULL));
+    } else if (IsAlpha(c)) {
+      I64 start = i;
+      while (i < n && IsAlnum(CharAt(src, i))) i = i + 1;
+      U8 word = Substr(src, start, i - start);
+      if (word == "print") {
+        Append(out, Tok(258, 0, NULL));
+      } else {
+        Append(out, Tok(257, 0, word));
+      }
+    } else {
+      Append(out, Tok(c, 0, NULL));   // single-character operator / paren / ; / =
+      i = i + 1;
+    }
+  }
+  Append(out, Tok(0, 0, NULL));       // end-of-input sentinel
+  return out;
+}
+
+// ---- parser ----------------------------------------------------------------
+// Shared parser state (globals; the parse functions mutate `pos`).
+U0[] toks = [];
+I64 pos = 0;
+
+I64 PeekKind() { return toks[pos].kind; }
+U0  Advance()  { pos = pos + 1; }
+
+Node MakeNum(I64 v)              { return Node(256, v, NULL, NULL, NULL); }
+Node MakeVar(U8 name)            { return Node(257, 0, name, NULL, NULL); }
+Node MakeNeg(Node c)             { return Node(110, 0, NULL, c, NULL); }
+Node MakeBin(I64 op, Node l, Node r) { return Node(op, 0, NULL, l, r); }
+
+Node ParseExpr();   // forward declaration (mutual recursion with ParseFactor)
+
+Node ParseFactor()
+{
+  Tok t = toks[pos];
+  if (t.kind == 256) { Advance(); return MakeNum(t.val); }     // number
+  if (t.kind == 257) { Advance(); return MakeVar(t.name); }    // variable
+  if (t.kind == 40)  {                                         // '(' expr ')'
+    Advance();
+    Node e = ParseExpr();
+    Advance();                                                 // consume ')'
+    return e;
+  }
+  if (t.kind == 45) { Advance(); return MakeNeg(ParseFactor()); }  // unary '-'
+  return MakeNum(0);                                           // unexpected: 0
+}
+
+Node ParseTerm()
+{
+  Node left = ParseFactor();
+  while (PeekKind() == 42 || PeekKind() == 47 || PeekKind() == 37) {  // * / %
+    I64 op = PeekKind();
+    Advance();
+    left = MakeBin(op, left, ParseFactor());
+  }
+  return left;
+}
+
+Node ParseExpr()
+{
+  Node left = ParseTerm();
+  while (PeekKind() == 43 || PeekKind() == 45) {                      // + -
+    I64 op = PeekKind();
+    Advance();
+    left = MakeBin(op, left, ParseTerm());
+  }
+  return left;
+}
+
+Stmt ParseStmt()
+{
+  if (PeekKind() == 258) {            // print expr ;
+    Advance();
+    Node e = ParseExpr();
+    Advance();                        // consume ';'
+    return Stmt(1, NULL, e);
+  }
+  U8 name = toks[pos].name;           // name = expr ;
+  Advance();                          // consume identifier
+  Advance();                          // consume '='
+  Node e = ParseExpr();
+  Advance();                          // consume ';'
+  return Stmt(0, name, e);
+}
+
+// Parse a whole program (string) into an array of Stmt.
+U0[] Parse(U8 src)
+{
+  toks = Tokenize(src);
+  pos = 0;
+  U0[] stmts = [];
+  while (PeekKind() != 0) Append(stmts, ParseStmt());
+  return stmts;
+}
+
+// ---- symbol table + code generation ----------------------------------------
+// syms maps a variable name -> its slot index; nslots is the slot count.
+U0  syms = MapNew();
+I64 nslots = 0;
+
+I64 SlotOf(U8 name)
+{
+  if (MapHas(syms, name)) return MapGet(syms, name);
+  I64 slot = nslots;
+  MapSet(syms, name, slot);
+  nslots = nslots + 1;
+  return slot;
+}
+
+I64 BinOpcode(I64 c)
+{
+  if (c == 43) return OP_ADD;
+  if (c == 45) return OP_SUB;
+  if (c == 42) return OP_MUL;
+  if (c == 47) return OP_DIV;
+  return OP_MOD;                       // '%'
+}
+
+U0 GenExpr(Node n, U0[] prog)
+{
+  if (n.op == 256) { Append(prog, Instr(OP_PUSH, n.val)); return; }
+  if (n.op == 257) { Append(prog, Instr(OP_LOAD, SlotOf(n.name))); return; }
+  if (n.op == 110) {                   // negate
+    GenExpr(n.left, prog);
+    Append(prog, Instr(OP_NEG, 0));
+    return;
+  }
+  GenExpr(n.left, prog);               // binary: left, right, op
+  GenExpr(n.right, prog);
+  Append(prog, Instr(BinOpcode(n.op), 0));
+}
+
+U0 GenStmt(Stmt s, U0[] prog)
+{
+  GenExpr(s.expr, prog);
+  if (s.kind == 0) {                   // assignment -> STORE
+    Append(prog, Instr(OP_STORE, SlotOf(s.name)));
+  } else {                             // print -> PRINT
+    Append(prog, Instr(OP_PRINT, 0));
+  }
+}
+
+// Compile a statement list into a bytecode program. Resets the symbol table;
+// the resulting slot count is left in the global `nslots`.
+U0[] Compile(U0[] stmts)
+{
+  syms = MapNew();
+  nslots = 0;
+  U0[] prog = [];
+  I64 i = 0;
+  while (i < Len(stmts)) {
+    GenStmt(stmts[i], prog);
+    i = i + 1;
+  }
+  return prog;
+}
+
+// ---- disassembler ----------------------------------------------------------
+U8 OpName(I64 op)
+{
+  if (op == OP_PUSH)  return "PUSH";
+  if (op == OP_LOAD)  return "LOAD";
+  if (op == OP_STORE) return "STORE";
+  if (op == OP_ADD)   return "ADD";
+  if (op == OP_SUB)   return "SUB";
+  if (op == OP_MUL)   return "MUL";
+  if (op == OP_DIV)   return "DIV";
+  if (op == OP_MOD)   return "MOD";
+  if (op == OP_NEG)   return "NEG";
+  return "PRINT";
+}
+
+I64 HasArg(I64 op) { return op == OP_PUSH || op == OP_LOAD || op == OP_STORE; }
+
+U0 Disasm(U0[] prog)
+{
+  I64 i = 0;
+  while (i < Len(prog)) {
+    Instr ins = prog[i];
+    if (HasArg(ins.op)) {
+      "%3d  %-6s %d\n", i, OpName(ins.op), ins.arg;
+    } else {
+      "%3d  %s\n", i, OpName(ins.op);
+    }
+    i = i + 1;
+  }
+}
+
+// ---- bytecode VM (operand stack + variable store in MAlloc'd memory) --------
+// Runs `prog` and returns an array of the values printed by PRINT instructions.
+U0[] Run(U0[] prog)
+{
+  U0[] outs = [];
+  U0 stack = MAlloc(8 * 256);               // operand stack (256 I64 slots)
+  I64 cells = nslots;
+  if (cells < 1) cells = 1;
+  U0 vars = MAlloc(8 * cells);              // variable store (zeroed)
+  I64 sp = 0;
+
+  I64 i = 0;
+  while (i < Len(prog)) {
+    Instr ins = prog[i];
+    I64 op = ins.op;
+    if (op == OP_PUSH) {
+      PokeI64(stack, sp, ins.arg); sp = sp + 1;
+    } else if (op == OP_LOAD) {
+      PokeI64(stack, sp, PeekI64(vars, ins.arg)); sp = sp + 1;
+    } else if (op == OP_STORE) {
+      sp = sp - 1; PokeI64(vars, ins.arg, PeekI64(stack, sp));
+    } else if (op == OP_NEG) {
+      PokeI64(stack, sp - 1, -PeekI64(stack, sp - 1));
+    } else if (op == OP_PRINT) {
+      sp = sp - 1; Append(outs, PeekI64(stack, sp));
+    } else {
+      // binary op: pop b, pop a, push (a OP b)
+      I64 b = PeekI64(stack, sp - 1);
+      I64 a = PeekI64(stack, sp - 2);
+      sp = sp - 1;
+      I64 r = 0;
+      if (op == OP_ADD) r = a + b;
+      if (op == OP_SUB) r = a - b;
+      if (op == OP_MUL) r = a * b;
+      if (op == OP_DIV) r = a / b;
+      if (op == OP_MOD) r = a % b;
+      PokeI64(stack, sp - 1, r);
+    }
+    i = i + 1;
+  }
+  Free(stack);
+  Free(vars);
+  return outs;
+}
+
+// ---- reference tree-walk interpreter (to verify codegen in-language) -------
+U0  refVals = MapNew();
+
+I64 EvalNode(Node n)
+{
+  if (n.op == 256) return n.val;
+  if (n.op == 257) return MapGet(refVals, n.name);
+  if (n.op == 110) return -EvalNode(n.left);
+  I64 l = EvalNode(n.left);
+  I64 r = EvalNode(n.right);
+  if (n.op == 43) return l + r;
+  if (n.op == 45) return l - r;
+  if (n.op == 42) return l * r;
+  if (n.op == 47) return l / r;
+  return l % r;
+}
+
+U0[] Interp(U0[] stmts)
+{
+  refVals = MapNew();
+  U0[] outs = [];
+  I64 i = 0;
+  while (i < Len(stmts)) {
+    Stmt s = stmts[i];
+    if (s.kind == 0) {
+      MapSet(refVals, s.name, EvalNode(s.expr));
+    } else {
+      Append(outs, EvalNode(s.expr));
+    }
+    i = i + 1;
+  }
+  return outs;
+}
+
+// Element-wise equality of two int arrays (for the codegen sanity check).
+I64 SameInts(U0[] a, U0[] b)
+{
+  if (Len(a) != Len(b)) return 0;
+  I64 i = 0;
+  while (i < Len(a)) {
+    if (a[i] != b[i]) return 0;
+    i = i + 1;
+  }
+  return 1;
+}
