@@ -1,0 +1,3 @@
+Square(5)   = 25
+v.LenSq()   = 25
+Hypot2(v)   = 25

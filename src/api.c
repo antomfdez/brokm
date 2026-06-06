@@ -9,7 +9,7 @@
 #include "typecheck.h"
 #include "vm.h"
 
-#define BROKM_VERSION "0.9.0"
+#define BROKM_VERSION "0.10.0"
 
 /* BrokmValue and the internal Value are layout-identical 16-byte structs; this
  * union reinterprets between them (the host only ever builds a BrokmValue via
@@ -79,7 +79,20 @@ static char *read_file(const char *path) {
 BrokmResult brokm_run_file(const char *path) {
   char *source = read_file(path);
   if (source == NULL) return BROKM_RUNTIME_ERROR;
-  BrokmResult result = brokm_eval(source);
+
+  /* Resolve the file's directory so its #includes are relative to it. */
+  char dir[1024];
+  const char *slash = strrchr(path, '/');
+  if (slash == NULL) {
+    snprintf(dir, sizeof(dir), ".");
+  } else {
+    int len = (int)(slash - path);
+    if (len == 0) len = 1; /* root path: keep the leading '/' */
+    snprintf(dir, sizeof(dir), "%.*s", len, path);
+  }
+
+  BrokmResult result = map_result(vm_interpret_file(source, dir));
+  vm_api_clear_roots();
   free(source);
   return result;
 }

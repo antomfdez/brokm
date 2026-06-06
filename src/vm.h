@@ -54,6 +54,9 @@ extern VM vm;
 void vm_init(void);
 void vm_free(void);
 InterpretResult vm_interpret(const char *source);
+/* Like vm_interpret, but resolves relative `#include` paths against baseDir
+ * (the directory of the file being run). */
+InterpretResult vm_interpret_file(const char *source, const char *baseDir);
 
 void vm_push(Value value);
 Value vm_pop(void);

@@ -5,14 +5,15 @@ language with a clean [HolyC](https://en.wikipedia.org/wiki/TempleOS#HolyC)-flav
 It is built primarily for its author's own use, with four design goals: **small, fast, robust,
 and easy to embed**.
 
-This is **v0.9**: a working bytecode VM with a precise, **generational** mark-sweep garbage
+This is **v0.10**: a working bytecode VM with a precise, **generational** mark-sweep garbage
 collector, aggregate types (arrays + classes/structs **with methods**), an opt-in
 **manual-memory** mode for low-level work, a **static type checker** that validates the HolyC type
 annotations before any code runs, **typed bytecode** that specializes the int hot path, a
 **baseline JIT** that compiles hot functions to native code (**arm64 + x86-64**, with a full
 interpreter fallback), a **standard library** (file I/O, strings, math), **string-keyed maps**,
-and a **C embedding API** (register natives, exchange values, call brokm from C) — enough to write
-a [brokm tokenizer and parser in brokm](examples/calc.bk) (see [docs/ROADMAP.md](docs/ROADMAP.md)).
+a **C embedding API** (register natives, exchange values, call brokm from C), and **multi-file
+programs** via `#include` — enough to write a
+[brokm tokenizer and parser in brokm](examples/calc.bk) (see [docs/ROADMAP.md](docs/ROADMAP.md)).
 
 ```holyc
 // hello.bk — top-level code runs; a bare string statement prints.
@@ -62,6 +63,7 @@ make debug        # ASan/UBSan + bytecode/exec tracing build
   with `MapHas`/`MapDelete`/`MapLen`/`MapKeys`.
 - **Control flow**: `if/else`, `while`, `for`, `do/while`, `switch/case/default`,
   `break`, `continue`, `return`.
+- **Multi-file**: `#include "lib.bk"` — textual, include-once, resolved relative to the file.
 - **Operators**: `+ - * / %`, comparisons, `&& || !`, bitwise `& | ^ ~ << >>`,
   assignment + compound (`+=` …), `++ --`.
 
@@ -119,7 +121,8 @@ primitive a self-hosted compiler needs, with their mutations exercising the writ
 red/green. Classes carry **methods** (`obj.m(args)` with an implicit `this`, dispatched through a
 new `OP_INVOKE`), so a compiler's data types can hold behavior. A **C embedding API** lets a host
 register native functions, exchange scalar and string values, read/set globals, and call brokm
-functions from C (`examples/embed.c`). Next up: multi-instance VMs — see the roadmap.
+functions from C (`examples/embed.c`). **`#include`** splits a program across files — textual,
+include-once, resolved relative to each file. Next up: multi-instance VMs — see the roadmap.
 
 ## License
 

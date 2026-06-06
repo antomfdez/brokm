@@ -1,21 +1,61 @@
-/* lexer.c - hand-written scanner for HolyC-flavored brokm source. */
+/* lexer.c - hand-written scanner for HolyC-flavored brokm source.
+ *
+ * Supports `#include "path"` as a transparent textual include: the directive is
+ * resolved in the lexer via a stack of source frames, so the parser sees one
+ * continuous token stream. Includes resolve relative to the including file's
+ * directory and are processed once per file (include-once / cycle-safe). */
+#include <limits.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "common.h"
 #include "lexer.h"
 
+#define LEXER_MAX_INCLUDE_DEPTH 32
+#define LEXER_MAX_INCLUDED 256
+
+/* A suspended parent source while an #include is being scanned. */
 typedef struct {
+  const char *start;
+  const char *current;
+  int line;
+  char dir[PATH_MAX];
+} Frame;
+
+typedef struct {
+  /* Active source (the token functions below read these directly). */
   const char *start;   /* start of the token being scanned */
   const char *current; /* current scan position */
   int line;
+  char dir[PATH_MAX]; /* directory of the active file, for relative includes */
+
+  Frame stack[LEXER_MAX_INCLUDE_DEPTH]; /* suspended parents */
+  int depth;                            /* number of suspended parents */
+
+  char *buffers[LEXER_MAX_INCLUDED]; /* malloc'd file contents, freed after parse */
+  int bufferCount;
+  char *included[LEXER_MAX_INCLUDED]; /* canonical paths already included */
+  int includedCount;
 } Lexer;
 
 static Lexer lexer;
 
-void lexer_init(const char *source) {
+void lexer_init(const char *source, const char *baseDir) {
   lexer.start = source;
   lexer.current = source;
   lexer.line = 1;
+  snprintf(lexer.dir, sizeof(lexer.dir), "%s", (baseDir && *baseDir) ? baseDir : ".");
+  lexer.depth = 0;
+  lexer.bufferCount = 0;
+  lexer.includedCount = 0;
+}
+
+void lexer_free_buffers(void) {
+  for (int i = 0; i < lexer.bufferCount; i++) free(lexer.buffers[i]);
+  for (int i = 0; i < lexer.includedCount; i++) free(lexer.included[i]);
+  lexer.bufferCount = 0;
+  lexer.includedCount = 0;
 }
 
 static bool is_alpha(char c) {
@@ -183,12 +223,144 @@ static Token character(void) {
   return make_token(TOKEN_INT);
 }
 
+/* ---- #include support ------------------------------------------------- */
+
+static char *read_source_file(const char *path) {
+  FILE *file = fopen(path, "rb");
+  if (file == NULL) return NULL;
+  fseek(file, 0L, SEEK_END);
+  long size = ftell(file);
+  rewind(file);
+  char *buffer = (char *)malloc((size_t)size + 1);
+  if (buffer == NULL) {
+    fclose(file);
+    return NULL;
+  }
+  size_t read = fread(buffer, 1, (size_t)size, file);
+  buffer[read] = '\0';
+  fclose(file);
+  return buffer;
+}
+
+static char *dup_cstr(const char *s) {
+  size_t n = strlen(s) + 1;
+  char *copy = (char *)malloc(n);
+  if (copy) memcpy(copy, s, n);
+  return copy;
+}
+
+/* Set `out` to the directory portion of `path` (or "." if none). */
+static void dir_of(const char *path, char *out, size_t cap) {
+  const char *slash = strrchr(path, '/');
+  if (slash == NULL) {
+    snprintf(out, cap, ".");
+  } else {
+    int len = (int)(slash - path);
+    if (len == 0) len = 1; /* keep the leading '/' for a root path */
+    snprintf(out, cap, "%.*s", len, path);
+  }
+}
+
+/* Scan a `#include "path"` directive (the '#' is already consumed) and either
+ * push the referenced file as a new source frame, skip it (already included),
+ * or fail. Returns true on success; on failure sets *err to an error token. */
+static bool handle_include(Token *err) {
+  skip_whitespace();
+  const char *w = lexer.current;
+  while (is_alpha(peek())) advance();
+  if ((int)(lexer.current - w) != 7 || memcmp(w, "include", 7) != 0) {
+    *err = error_token("Expected 'include' after '#'.");
+    return false;
+  }
+  skip_whitespace();
+  if (peek() != '"') {
+    *err = error_token("Expected \"path\" after #include.");
+    return false;
+  }
+  advance(); /* opening quote */
+  const char *p = lexer.current;
+  while (peek() != '"' && peek() != '\n' && !at_end()) advance();
+  if (peek() != '"') {
+    *err = error_token("Unterminated #include path.");
+    return false;
+  }
+  int plen = (int)(lexer.current - p);
+  advance(); /* closing quote */
+
+  static char errbuf[PATH_MAX + 64];
+  char rel[PATH_MAX];
+  if (plen <= 0 || plen >= (int)sizeof(rel)) {
+    *err = error_token("Invalid #include path.");
+    return false;
+  }
+  memcpy(rel, p, (size_t)plen);
+  rel[plen] = '\0';
+
+  char joined[PATH_MAX];
+  if (rel[0] == '/') {
+    snprintf(joined, sizeof(joined), "%s", rel);
+  } else {
+    snprintf(joined, sizeof(joined), "%s/%s", lexer.dir, rel);
+  }
+  char canon[PATH_MAX];
+  if (realpath(joined, canon) == NULL) {
+    snprintf(errbuf, sizeof(errbuf), "Could not open #include \"%s\".", rel);
+    *err = error_token(errbuf);
+    return false;
+  }
+
+  for (int i = 0; i < lexer.includedCount; i++) {
+    if (strcmp(lexer.included[i], canon) == 0) return true; /* include-once */
+  }
+  if (lexer.depth + 1 >= LEXER_MAX_INCLUDE_DEPTH ||
+      lexer.bufferCount >= LEXER_MAX_INCLUDED) {
+    *err = error_token("#include nesting too deep.");
+    return false;
+  }
+
+  char *buf = read_source_file(canon);
+  if (buf == NULL) {
+    snprintf(errbuf, sizeof(errbuf), "Could not read #include \"%s\".", rel);
+    *err = error_token(errbuf);
+    return false;
+  }
+  lexer.buffers[lexer.bufferCount++] = buf;
+  lexer.included[lexer.includedCount++] = dup_cstr(canon);
+
+  /* Suspend the current source and switch to the included file. */
+  Frame *parent = &lexer.stack[lexer.depth++];
+  parent->start = lexer.start;
+  parent->current = lexer.current;
+  parent->line = lexer.line;
+  snprintf(parent->dir, sizeof(parent->dir), "%s", lexer.dir);
+
+  lexer.start = buf;
+  lexer.current = buf;
+  lexer.line = 1;
+  dir_of(canon, lexer.dir, sizeof(lexer.dir));
+  return true;
+}
+
 Token lexer_next(void) {
   skip_whitespace();
+  /* At a file's end, resume the parent that #included it. */
+  while (at_end() && lexer.depth > 0) {
+    Frame *parent = &lexer.stack[--lexer.depth];
+    lexer.start = parent->start;
+    lexer.current = parent->current;
+    lexer.line = parent->line;
+    snprintf(lexer.dir, sizeof(lexer.dir), "%s", parent->dir);
+    skip_whitespace();
+  }
   lexer.start = lexer.current;
   if (at_end()) return make_token(TOKEN_EOF);
 
   char c = advance();
+  if (c == '#') {
+    Token err;
+    if (!handle_include(&err)) return err;
+    return lexer_next(); /* continue with the included (or resumed) source */
+  }
   if (is_alpha(c)) return identifier();
   if (is_digit(c)) return number();
 

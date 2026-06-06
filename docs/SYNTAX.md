@@ -9,6 +9,26 @@ A HolyC-flavored, C-like language. This documents what v0.1 actually implements.
 /* block comment */
 ```
 
+## Modules (`#include`)
+
+Split a program across files with `#include "path"`:
+
+```c
+#include "mathlib.bk"   // path is relative to THIS file's directory
+#include "mathlib.bk"   // including the same file again is a no-op
+
+"%d\n", Square(5);      // use a function defined in mathlib.bk
+```
+
+- The path is resolved **relative to the directory of the including file** (the
+  top-level file is resolved relative to the current directory).
+- Inclusion is **textual and flat**: the included file's declarations join the
+  same global namespace, exactly as if pasted in — functions, classes (with
+  methods), and globals are all shared. There is no per-module scoping.
+- **Include-once / cycle-safe**: each file is included at most once (by canonical
+  path), so mutually-including files terminate.
+- A missing file is a compile error.
+
 ## Types
 
 `U0 U8 U16 U32 U64 I8 I16 I32 I64 F64 Bool`

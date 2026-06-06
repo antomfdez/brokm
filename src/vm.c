@@ -706,14 +706,14 @@ bool jit_h_print(int argCount) {
 }
 #endif /* BK_NO_JIT */
 
-InterpretResult vm_interpret(const char *source) {
+static InterpretResult interpret(const char *source, const char *baseDir) {
   /* Parsing and compilation allocate objects (interned names, functions,
    * constants) that are not yet reachable from VM roots, so collection stays
    * off until the script is built and pushed. */
   vm.gcEnabled = false;
 
   StmtList program;
-  bool ok = parse(source, &program);
+  bool ok = parse(source, baseDir, &program);
   if (!ok) {
     free_stmtlist(&program);
     return BK_COMPILE_ERROR;
@@ -737,6 +737,14 @@ InterpretResult vm_interpret(const char *source) {
 
   vm.gcEnabled = true; /* the script and its constants are now rooted */
   return run_until(0);
+}
+
+InterpretResult vm_interpret(const char *source) {
+  return interpret(source, NULL); /* #includes resolve relative to the CWD */
+}
+
+InterpretResult vm_interpret_file(const char *source, const char *baseDir) {
+  return interpret(source, baseDir);
 }
 
 /* ---- embedding support (used by api.c) -------------------------------- */

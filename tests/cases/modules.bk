@@ -1,0 +1,17 @@
+// v0.10 modules: pull in a library with #include. The path is resolved relative
+// to this file's directory. Including the same file twice is a no-op
+// (include-once), so the definitions below are not duplicated.
+#include "mod_lib.bk"
+#include "mod_lib.bk"
+
+// Use a function from the library.
+"Square(5)   = %d\n", Square(5);          // 25
+
+// Use a class (with a method) defined in the library, including a method that
+// itself calls a library function across the include boundary.
+Vec2 v = Vec2(3, 4);
+"v.LenSq()   = %d\n", v.LenSq();          // 9 + 16 = 25
+
+// Library definitions compose with local code as if written in one file.
+I64 Hypot2(Vec2 p) { return p.LenSq(); }
+"Hypot2(v)   = %d\n", Hypot2(v);          // 25

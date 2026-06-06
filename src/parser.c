@@ -845,8 +845,8 @@ static Stmt *declaration(void) {
   return s;
 }
 
-bool parse(const char *source, StmtList *out) {
-  lexer_init(source);
+bool parse(const char *source, const char *baseDir, StmtList *out) {
+  lexer_init(source, baseDir);
   parser.hadError = false;
   parser.panicMode = false;
   classNameCount = 0;
@@ -856,5 +856,6 @@ bool parse(const char *source, StmtList *out) {
   while (!check(TOKEN_EOF)) {
     stmtlist_write(out, declaration());
   }
+  lexer_free_buffers(); /* the AST holds interned copies, not source pointers */
   return !parser.hadError;
 }

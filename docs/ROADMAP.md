@@ -273,6 +273,28 @@ brokm with real values, not just `eval` strings.
 **Deferred:** multi-instance VMs (replacing the global `VM vm`), exchanging
 arrays/instances/maps across the boundary, and a formal spec.
 
+## v0.10 — Modules / multi-file ✅ (done)
+
+Programs can span files with **`#include "path"`**, in the HolyC spirit: textual, flat-namespace
+inclusion, resolved **entirely in the lexer** so the parser, type checker, compiler, VM, and JIT
+are unchanged.
+
+- The lexer keeps a stack of source frames; on `#include "path"` it resolves the path **relative
+  to the including file's directory**, reads the file, and pushes a frame — the parser sees one
+  continuous token stream, so cross-file functions, classes (with methods), and ordering all work
+  as if the files were concatenated, sharing one `classNames` registry.
+- **Include-once / cycle-safe** by canonical path (`realpath`): re-including a file is a no-op, so
+  mutually-including files terminate.
+- A missing file or malformed directive is a **compile error** with a line number, not a crash.
+- Included source buffers are freed after parsing (the AST holds interned strings, not source
+  pointers). `brokm_run_file` resolves includes relative to the file's directory; `brokm_eval`
+  (and the REPL) relative to the current directory.
+- **Verified** four ways (default / forced JIT / `-DBK_NO_JIT` / GC stress) plus the embedding
+  example — 29 tests, 0 warnings (`tests/cases/modules.bk` + the `mod_lib.bk` it includes).
+
+**Deferred:** namespaced/qualified imports (`math.Sqrt`), per-module private globals, a module
+search path, and selective imports.
+
 ## Self-hosting (north star)
 
 Can brokm compile itself? Eventually, yes — and brokm now hosts the front-end of a compiler.
@@ -292,8 +314,9 @@ Can brokm compile itself? Eventually, yes — and brokm now hosts the front-end 
 - **Map/hash type ✅** (v0.7) — `MapNew`/`MapGet`/`MapSet`/… give the symbol-table primitive.
 - **Methods ✅** (v0.8) — instance methods with `this`, so a compiler's data types can carry
   behavior.
-- **Still needed:** modules / multi-file programs, and smaller parser conveniences (array-of-class
-  declarations `Node[] xs`, forward declarations).
+- **Modules ✅** (v0.10) — `#include "file"` splits a compiler across files.
+- **Still needed:** smaller parser conveniences (array-of-class declarations `Node[] xs`, forward
+  declarations).
 - **Path:** lexer ✅ → parser/AST ✅ → a code generator emitting the existing bytecode (runnable
   on the current C VM), then — much later — a runtime in brokm, retiring the C bootstrap. The
   baseline JIT matters here: a self-hosted compiler is compute-heavy.
@@ -303,4 +326,4 @@ Can brokm compile itself? Eventually, yes — and brokm now hosts the front-end 
 - Multiple declarators per statement; command-style function calls; HolyC sub-switches.
 - Methods on classes ✅ (v0.8); inheritance, static methods, and first-class/bound methods still
   open. `&`/`*` on managed values (raw `MAlloc` only).
-- Modules / multi-file programs.
+- Modules / multi-file programs ✅ (v0.10, `#include`); namespaced imports still open.

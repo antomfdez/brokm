@@ -1,0 +1,10 @@
+// A small library included by modules.bk. It has no .expected file, so the
+// golden runner skips it as a standalone case; it exists only to be #included.
+
+I64 Square(I64 n) { return n * n; }
+
+class Vec2 {
+  I64 x;
+  I64 y;
+  I64 LenSq() { return Square(this.x) + Square(this.y); }
+}
