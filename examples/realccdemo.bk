@@ -72,3 +72,14 @@ U0 arrayProg = Compile("
   primes(20);
 ");
 arrayProg();                                            // 2 3 5 7 11 13 17 19
+
+// Strings (step 9): literals, concatenation, and the native Print, with labels
+// in front of computed numbers.
+U0 strProg = Compile("
+  Print(\"-- strings --\n\");
+  who = \"brokm\";
+  Print(\"hello, \" + who + \"!\n\");
+  func fact(n) { if (n <= 1) { return 1; } return n * fact(n - 1); }
+  Print(\"5! = \"); print fact(5);
+");
+strProg();                                              // hello, brokm! / 5! = 120

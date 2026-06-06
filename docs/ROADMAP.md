@@ -372,11 +372,18 @@ Can brokm compile itself? Eventually, yes — and brokm now hosts the front-end 
   `tests/cases/selfhost6.bk` builds and mutates arrays, grows one with `Append`, and runs a bubble
   sort (nested loops + index get/set + a swap temporary) — byte-identical on the interpreter, the
   JIT, and under GC stress (arrays are heap objects exercising the write barrier).
+- **Step 9 — strings ✅.** `examples/realcc.bk` gained **string literals** (`"..."` with `\n`, `\t`,
+  `\"`, `\\` escapes), emitted as real `OP_CONSTANT` string values. They concatenate with `+` (the
+  VM's runtime string concatenation), print through the native `Print`, and flow through variables,
+  arrays, and function parameters — once more with **no C changes**. `tests/cases/selfhost7.bk`
+  prints text and concatenations, indexes an array of strings, and labels a computed `fib(10)` —
+  byte-identical on the interpreter, the JIT, and under GC stress.
 - **Path:** lexer ✅ → parser/AST ✅ → code generator ✅ → real bytecode ✅ → control flow ✅ →
-  functions ✅ → locals ✅ → arrays ✅. The in-brokm compiler is now a real, if small, language
-  back-end with the native stdlib in reach. Next, grow the source language toward brokm's own (type
-  annotations, strings, structs) and feed it brokm source, then — much later — a runtime in brokm,
-  retiring the C bootstrap. The baseline JIT matters here: a self-hosted compiler is compute-heavy.
+  functions ✅ → locals ✅ → arrays ✅ → strings ✅. The in-brokm compiler is a real, if small,
+  language back-end with values, control flow, functions, aggregates, and the native stdlib in reach.
+  Next, grow the source language toward brokm's own (type annotations, structs/maps) and feed it
+  brokm source, then — much later — a runtime in brokm, retiring the C bootstrap. The baseline JIT
+  matters here: a self-hosted compiler is compute-heavy.
 
 ## Language features tracked across milestones
 

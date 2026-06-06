@@ -1,0 +1,30 @@
+// selfhost7.bk — self-hosting step 9: STRING literals in the in-brokm
+// real-bytecode compiler. The toy language gained "..." string literals (with
+// \n \t \" \\ escapes), which are emitted as real OP_CONSTANT string values;
+// they concatenate with `+` (the VM's runtime string concatenation) and print
+// through the native `Print` (reached as a global via the call path). Strings
+// also flow through variables, arrays, and function parameters (as locals).
+// #includes the compiler across directories.
+//
+// Expected output:
+//   Hello, brokm!
+//   concat: world
+//   ccc
+//   fib(10) = 55
+#include "../../examples/realcc.bk"
+
+U0 prog = Compile("
+  Print(\"Hello, brokm!\n\");
+
+  name = \"wor\" + \"ld\";
+  Print(\"con\" + \"cat: \" + name + \"\n\");
+
+  words = [\"a\", \"bb\", \"ccc\"];
+  Print(words[2]);
+  Print(\"\n\");
+
+  func label(s, n) { Print(s); print n; return 0; }
+  func fib(n) { if (n < 2) { return n; } return fib(n - 1) + fib(n - 2); }
+  label(\"fib(10) = \", fib(10));
+");
+prog();

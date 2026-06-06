@@ -1,9 +1,9 @@
 // realcc.bk — a small imperative language compiled to brokm's REAL bytecode.
-// Self-hosting steps 4-7: from the Opcode/Assemble bridge (step 4) through
+// Self-hosting steps 4-9: from the Opcode/Assemble bridge (step 4) through
 // control flow (step 5), FUNCTION DEFINITIONS with parameters, recursion, and
-// calls (step 6), to function-scoped LOCAL VARIABLES (step 7) — so a recursive
-// function's temporaries no longer leak into (and clobber each other through)
-// the global namespace.
+// calls (step 6), function-scoped LOCAL VARIABLES (step 7), ARRAYS with the
+// native stdlib in reach (step 8), to STRING literals (step 9) — text values
+// that concatenate with `+` and print via the native `Print`.
 //
 // A function definition is compiled to its OWN chunk and packed — via
 // Assemble(code, consts, arity) — into a real, callable ObjFunction, which is
@@ -32,13 +32,13 @@
 
 // ---- AST / token types -----------------------------------------------------
 // Tok.kind: 256 number, 257 ident, 258 print, 259 if, 260 else, 261 while,
-//   262 func, 263 return, 0 EOF, two-char ops 280 `==` 281 `!=` 282 `<=`
-//   283 `>=`, else op char code.
+//   262 func, 263 return, 264 string (value in `name`), 0 EOF, two-char ops
+//   280 `==` 281 `!=` 282 `<=` 283 `>=`, else op char code.
 class Tok  { I64 kind; I64 val; U8 name; }
-// Node.op: 256 number, 257 variable, 110 negate, 300 call, 301 array literal,
-//   302 index (left[right]), else binary op code. For a call, `name` is the
-//   callee and `args` the argument Nodes; for an array literal, `args` holds the
-//   element Nodes.
+// Node.op: 256 number, 257 variable, 264 string, 110 negate, 300 call,
+//   301 array literal, 302 index (left[right]), else binary op code. For a call,
+//   `name` is the callee and `args` the argument Nodes; for an array literal,
+//   `args` holds the element Nodes; for a string, `name` is the value.
 class Node { I64 op; I64 val; U8 name; Node left; Node right; U0[] args; }
 // Stmt.kind: 0 assign, 1 print, 2 if, 3 while, 4 return, 5 func, 6 index-set
 //   (expr = target index node, expr2 = value), 7 expression statement.
@@ -79,6 +79,26 @@ U0[] Tokenize(U8 src)
       else if (word == "func")   Append(out, Tok(262, 0, NULL));
       else if (word == "return") Append(out, Tok(263, 0, NULL));
       else                       Append(out, Tok(257, 0, word));
+    } else if (c == 34) {              // string literal "..."
+      i = i + 1;                       // skip opening quote
+      U8 s = "";
+      while (i < n && CharAt(src, i) != 34) {
+        I64 ch = CharAt(src, i);
+        if (ch == 92 && i + 1 < n) {   // backslash escape
+          i = i + 1;
+          I64 e = CharAt(src, i);
+          if (e == 110)      s = s + Chr(10);   // \n
+          else if (e == 116) s = s + Chr(9);    // \t
+          else if (e == 34)  s = s + Chr(34);   // \"
+          else if (e == 92)  s = s + Chr(92);   // \\
+          else               s = s + Chr(e);    // unknown: literal char
+        } else {
+          s = s + Chr(ch);
+        }
+        i = i + 1;
+      }
+      i = i + 1;                       // skip closing quote
+      Append(out, Tok(264, 0, s));
     } else {
       // Two-character operators: ==, !=, <=, >=.
       I64 nx = 0;
@@ -102,6 +122,7 @@ I64 PeekKind() { return toks[pos].kind; }
 U0  Advance()  { pos = pos + 1; }
 
 Node MakeNum(I64 v)                  { return Node(256, v, NULL, NULL, NULL, NULL); }
+Node MakeStr(U8 s)                   { return Node(264, 0, s, NULL, NULL, NULL); }
 Node MakeVar(U8 name)                { return Node(257, 0, name, NULL, NULL, NULL); }
 Node MakeNeg(Node c)                 { return Node(110, 0, NULL, c, NULL, NULL); }
 Node MakeBin(I64 op, Node l, Node r) { return Node(op, 0, NULL, l, r, NULL); }
@@ -119,6 +140,7 @@ Node ParsePrimary()
 {
   Tok t = toks[pos];
   if (t.kind == 256) { Advance(); return MakeNum(t.val); }
+  if (t.kind == 264) { Advance(); return MakeStr(t.name); }
   if (t.kind == 257) {
     Advance();
     if (PeekKind() == 40) {                 // call:  name ( args )
@@ -389,6 +411,7 @@ I64 BinOpcode(I64 c)
 U0 GenExpr(Node n)
 {
   if (n.op == 256) { EmitArg(ROP_CONSTANT, AddConst(n.val)); return; }
+  if (n.op == 264) { EmitArg(ROP_CONSTANT, AddConst(n.name)); return; }  // string
   if (n.op == 257) {                          // variable: local or global
     I64 slot = LocalSlot(n.name);
     if (slot >= 0) EmitArg(ROP_GET_LOCAL, slot);
