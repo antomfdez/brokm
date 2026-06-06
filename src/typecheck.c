@@ -157,6 +157,16 @@ static bool class_field_type(TcClass *cls, ObjString *field, Type *out) {
   return false;
 }
 
+/* Is `name` a method of this class? Methods are gradual (TY_UNKNOWN result), so
+ * this only gates the "unknown field" diagnostic on instance member access. */
+static bool class_has_method(TcClass *cls, ObjString *name) {
+  StmtList *methods = &cls->decl->as.klass.methods;
+  for (int i = 0; i < methods->count; i++) {
+    if (methods->items[i]->as.func.name == name) return true;
+  }
+  return false;
+}
+
 static void register_natives(void) {
   /* Names from natives_register() in natives.c. All variadic, TY_UNKNOWN
    * result, so calls to them are never flagged. */
@@ -469,7 +479,8 @@ static Type check_expr(Expr *expr) {
       t = ty(TY_UNKNOWN);
       if (ot.kind == TY_INSTANCE) {
         TcClass *cls = ot.name ? find_class(ot.name) : NULL;
-        if (cls != NULL && !class_field_type(cls, expr->as.field.name, &t)) {
+        if (cls != NULL && !class_field_type(cls, expr->as.field.name, &t) &&
+            !class_has_method(cls, expr->as.field.name)) {
           tc_error(expr->line, "unknown field '%s' on %s",
                    expr->as.field.name->chars, ot.name->chars);
           t = ty(TY_UNKNOWN);
@@ -525,6 +536,22 @@ static void check_function(Stmt *stmt) {
   Type savedReturn = tc.currentReturn;
   tc.currentReturn = stmt->as.func.returnType;
   begin_scope();
+  NameList *params = &stmt->as.func.params;
+  for (int i = 0; i < params->count; i++) {
+    declare_var(params->items[i], stmt->as.func.paramTypes[i]);
+  }
+  check_stmt(stmt->as.func.body);
+  end_scope();
+  tc.currentReturn = savedReturn;
+}
+
+/* A method body, checked with `this` bound to an instance of its class. Unlike
+ * a free function, a method is not registered in the global function table. */
+static void check_method(Stmt *stmt, ObjString *className) {
+  Type savedReturn = tc.currentReturn;
+  tc.currentReturn = stmt->as.func.returnType;
+  begin_scope();
+  declare_var(string_copy("this", 4), ty_named(TY_INSTANCE, className));
   NameList *params = &stmt->as.func.params;
   for (int i = 0; i < params->count; i++) {
     declare_var(params->items[i], stmt->as.func.paramTypes[i]);
@@ -611,9 +638,14 @@ static void check_stmt(Stmt *stmt) {
     case STMT_BREAK:
     case STMT_CONTINUE:
       break;
-    case STMT_CLASS:
+    case STMT_CLASS: {
       register_class(stmt); /* top-level already registered; no-op then */
+      StmtList *methods = &stmt->as.klass.methods;
+      for (int i = 0; i < methods->count; i++) {
+        check_method(methods->items[i], stmt->as.klass.name);
+      }
       break;
+    }
   }
 }
 

@@ -5,13 +5,13 @@ language with a clean [HolyC](https://en.wikipedia.org/wiki/TempleOS#HolyC)-flav
 It is built primarily for its author's own use, with four design goals: **small, fast, robust,
 and easy to embed**.
 
-This is **v0.7**: a working bytecode VM with a precise, **generational** mark-sweep garbage
-collector, aggregate types (arrays + classes/structs), an opt-in **manual-memory** mode for
-low-level work, a **static type checker** that validates the HolyC type annotations before
-any code runs, **typed bytecode** that specializes the int hot path, a **baseline JIT** that
-compiles hot functions to native code (**arm64 + x86-64**, with a full interpreter fallback),
-a **standard library** (file I/O, strings, math), and **string-keyed maps** — enough to write a
-[brokm tokenizer and parser in brokm](examples/calc.bk)
+This is **v0.8**: a working bytecode VM with a precise, **generational** mark-sweep garbage
+collector, aggregate types (arrays + classes/structs **with methods**), an opt-in
+**manual-memory** mode for low-level work, a **static type checker** that validates the HolyC type
+annotations before any code runs, **typed bytecode** that specializes the int hot path, a
+**baseline JIT** that compiles hot functions to native code (**arm64 + x86-64**, with a full
+interpreter fallback), a **standard library** (file I/O, strings, math), and **string-keyed
+maps** — enough to write a [brokm tokenizer and parser in brokm](examples/calc.bk)
 (see [docs/ROADMAP.md](docs/ROADMAP.md)).
 
 ```holyc
@@ -54,6 +54,8 @@ make debug        # ASan/UBSan + bytecode/exec tracing build
 - **Arrays**: dynamic, heap-allocated — `I64[] a = [1, 2, 3]; a[0] = 9;` with `Len`/`Append`.
 - **Classes/structs**: `class Point { I64 x; I64 y; }`, `Point p = Point(3, 4); p.x = 9;`
   (reference semantics).
+- **Methods**: declare `I64 Area() { return this.w * this.h; }` in the class body and call
+  `r.Area()`; the receiver is `this`.
 - **Manual memory**: `U0 b = MAlloc(32); PokeI64(b, 0, 42); Free(b);` — raw, GC-invisible
   buffers with typed peek/poke, plus `GcDisable`/`GcEnable`.
 - **Maps**: string-keyed hash maps — `U0 m = MapNew(); MapSet(m, "k", 1); MapGet(m, "k");`
@@ -100,7 +102,9 @@ library** of native builtins covers file I/O (`ReadFile`/`WriteFile`/`PrintErr`)
 `examples/calc.bk` parses + evaluates brokm-flavored source written in brokm, the first steps
 toward self-hosting. **String-keyed maps** (`MapNew`/`MapGet`/`MapSet`/…) add the symbol-table
 primitive a self-hosted compiler needs, with their mutations exercising the write barrier
-red/green. Next up: a richer embedding API and multi-instance VMs — see the roadmap.
+red/green. Classes carry **methods** (`obj.m(args)` with an implicit `this`, dispatched through a
+new `OP_INVOKE`), so a compiler's data types can hold behavior. Next up: a richer embedding API
+and multi-instance VMs — see the roadmap.
 
 ## License
 

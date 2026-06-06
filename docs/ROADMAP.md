@@ -217,6 +217,33 @@ already routes through `jit_h_call`).
 **Deferred:** map literal syntax (`{...}`), non-string (any-value) keys, and in-language
 iteration sugar — each layers on without reworking this.
 
+## v0.8 — Methods on classes ✅ (done)
+
+Classes gained **instance methods** with an implicit receiver `this`, called as `obj.m(args)`.
+Behavior that used to be written as free functions over instances can now live on the class.
+
+- **Declaration.** A class body entry whose name is followed by `(` is a method (the leading
+  type is its return type); otherwise it's a field. Methods are parsed into the class AST node
+  and, because classes are built at compile time, compiled and stored straight into the class's
+  **method table** — no runtime class-construction opcode.
+- **Dispatch.** `obj.m(args)` compiles to a new **`OP_INVOKE`** (method-name constant + arg
+  count): the receiver is pushed into the callee slot, so the method sees it as `this` (slot 0,
+  named `this` by the compiler). A field holding a callable still shadows methods (field-first
+  lookup), preserving `obj.fnField()`.
+- **`this`.** Inside a method, `this.field` reads/writes the receiver and `this.other()` calls a
+  sibling method. `this` is an ordinary local (slot 0), not a new keyword.
+- **Gradual typing.** Member access on an instance now accepts method names as well as fields;
+  accessing a name that is neither is a static error. Method bodies are checked with `this`
+  bound to an instance of the class.
+- **GC & JIT.** The class's method table is marked like instance fields (verified under
+  `make test-gc`). `OP_INVOKE` and field access make a function JIT-ineligible, so methods run on
+  the interpreter — output stays byte-identical across JIT modes.
+- **Verified** four ways (default / forced JIT / `-DBK_NO_JIT` / GC stress), 28 tests, 0 warnings
+  (`tests/cases/methods.bk`, `method_err.bk`).
+
+**Deferred:** first-class/bound methods (storing `obj.m`), implicit-`this` sibling calls,
+inheritance, static/class methods, and a `self` alias for `this`.
+
 ## Self-hosting (north star)
 
 Can brokm compile itself? Eventually, yes — and brokm now hosts the front-end of a compiler.
@@ -234,8 +261,10 @@ Can brokm compile itself? Eventually, yes — and brokm now hosts the front-end 
 - **Already enough:** functions/recursion, arrays, classes/structs (incl. self-referential),
   manual memory, strings + the string/IO stdlib.
 - **Map/hash type ✅** (v0.7) — `MapNew`/`MapGet`/`MapSet`/… give the symbol-table primitive.
-- **Still needed:** modules / multi-file programs, methods (today: free functions over instances),
-  and smaller parser conveniences (array-of-class declarations `Node[] xs`, forward declarations).
+- **Methods ✅** (v0.8) — instance methods with `this`, so a compiler's data types can carry
+  behavior.
+- **Still needed:** modules / multi-file programs, and smaller parser conveniences (array-of-class
+  declarations `Node[] xs`, forward declarations).
 - **Path:** lexer ✅ → parser/AST ✅ → a code generator emitting the existing bytecode (runnable
   on the current C VM), then — much later — a runtime in brokm, retiring the C bootstrap. The
   baseline JIT matters here: a self-hosted compiler is compute-heavy.
@@ -243,5 +272,6 @@ Can brokm compile itself? Eventually, yes — and brokm now hosts the front-end 
 ## Language features tracked across milestones
 
 - Multiple declarators per statement; command-style function calls; HolyC sub-switches.
-- Methods on classes; `&`/`*` on managed values (currently free functions + raw `MAlloc` only).
+- Methods on classes ✅ (v0.8); inheritance, static methods, and first-class/bound methods still
+  open. `&`/`*` on managed values (raw `MAlloc` only).
 - Modules / multi-file programs.

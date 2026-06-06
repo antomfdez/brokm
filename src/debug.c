@@ -23,6 +23,15 @@ static int byte_instruction(const char *name, Chunk *chunk, int offset) {
   return offset + 2;
 }
 
+static int invoke_instruction(const char *name, Chunk *chunk, int offset) {
+  U8 index = chunk->code[offset + 1];
+  U8 argc = chunk->code[offset + 2];
+  printf("%-16s %4d '", name, index);
+  value_print(chunk->constants.values[index]);
+  printf("' (%d args)\n", argc);
+  return offset + 3;
+}
+
 static int jump_instruction(const char *name, int sign, Chunk *chunk,
                             int offset) {
   U16 jump = (U16)(chunk->code[offset + 1] << 8);
@@ -84,6 +93,7 @@ int disassemble_instruction(Chunk *chunk, int offset) {
     case OP_INDEX_SET: return simple_instruction("OP_INDEX_SET", offset);
     case OP_GET_FIELD: return constant_instruction("OP_GET_FIELD", chunk, offset);
     case OP_SET_FIELD: return constant_instruction("OP_SET_FIELD", chunk, offset);
+    case OP_INVOKE: return invoke_instruction("OP_INVOKE", chunk, offset);
     case OP_IADD: return simple_instruction("OP_IADD", offset);
     case OP_ISUB: return simple_instruction("OP_ISUB", offset);
     case OP_IMUL: return simple_instruction("OP_IMUL", offset);

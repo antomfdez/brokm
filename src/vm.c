@@ -487,6 +487,36 @@ static InterpretResult run_until(int baseFrameCount) {
         frame = &vm.frames[vm.frameCount - 1];
         break;
       }
+      case OP_INVOKE: {
+        ObjString *name = READ_STRING();
+        int argCount = READ_BYTE();
+        Value recv = peek(argCount);
+        if (!IS_INSTANCE(recv)) {
+          runtime_error("Only instances have methods.");
+          return BK_RUNTIME_ERROR;
+        }
+        ObjInstance *inst = AS_INSTANCE(recv);
+        Value field;
+        if (table_get(&inst->fields, name, &field)) {
+          /* A field holding a callable shadows methods: call it as an ordinary
+           * value (receiver slot becomes the callable, no `this` binding). */
+          vm.stackTop[-argCount - 1] = field;
+          if (!call_value(field, argCount)) return BK_RUNTIME_ERROR;
+        } else {
+          Value method;
+          if (!table_get(&inst->klass->methods, name, &method)) {
+            runtime_error("%s has no method '%s'.", inst->klass->name->chars,
+                          name->chars);
+            return BK_RUNTIME_ERROR;
+          }
+          /* The receiver stays in slot 0, so the method sees it as `this`. */
+          if (!call_function(AS_FUNCTION(method), argCount)) {
+            return BK_RUNTIME_ERROR;
+          }
+        }
+        frame = &vm.frames[vm.frameCount - 1];
+        break;
+      }
       case OP_PRINT: {
         int argCount = READ_BYTE();
         bk_format(argCount, vm.stackTop - argCount);

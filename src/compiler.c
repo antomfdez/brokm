@@ -270,9 +270,19 @@ static void compile_logical(Expr *expr) {
 }
 
 static void compile_call(Expr *expr) {
-  compile_expr(expr->as.call.callee);
+  Expr *callee = expr->as.call.callee;
   int argc = expr->as.call.args.count;
   if (argc > 255) compile_error("Too many call arguments.");
+  /* `obj.method(args)` dispatches via OP_INVOKE: push the receiver (into the
+   * callee/`this` slot), then the args, then invoke by name. */
+  if (callee->kind == EXPR_FIELD) {
+    compile_expr(callee->as.field.object);
+    for (int i = 0; i < argc; i++) compile_expr(expr->as.call.args.items[i]);
+    emit_bytes(OP_INVOKE, identifier_constant(callee->as.field.name));
+    emit_byte((U8)argc);
+    return;
+  }
+  compile_expr(callee);
   for (int i = 0; i < argc; i++) compile_expr(expr->as.call.args.items[i]);
   emit_bytes(OP_CALL, (U8)argc);
 }
@@ -345,6 +355,7 @@ static void compile_expr(Expr *expr) {
 /* ---- statements ------------------------------------------------------- */
 
 static ObjFunction *compile_function(Stmt *stmt);
+static ObjFunction *compile_method(Stmt *stmt);
 
 static void compile_var(Stmt *stmt) {
   ObjString *name = stmt->as.var.name;
@@ -559,6 +570,14 @@ static void compile_class_decl(Stmt *stmt) {
   NameList *fields = &stmt->as.klass.fields;
   ObjClass *klass = class_new(stmt->as.klass.name, fields->count);
   for (int i = 0; i < fields->count; i++) klass->fields[i] = fields->items[i];
+  /* Methods are known at compile time; compile each and store it on the class.
+   * GC is disabled during compilation, so building the table here is safe. */
+  StmtList *methods = &stmt->as.klass.methods;
+  for (int i = 0; i < methods->count; i++) {
+    Stmt *m = methods->items[i];
+    ObjFunction *fn = compile_method(m);
+    table_set(&klass->methods, m->as.func.name, OBJ_VAL(fn));
+  }
   emit_bytes(OP_CONSTANT, (U8)make_constant(OBJ_VAL(klass)));
   emit_bytes(OP_DEFINE_GLOBAL, identifier_constant(stmt->as.klass.name));
 }
@@ -592,6 +611,26 @@ static ObjFunction *compile_function(Stmt *stmt) {
   fn->name = stmt->as.func.name;
   fn->arity = stmt->as.func.params.count;
   init_compiler(&compiler, fn, current);
+
+  begin_scope();
+  NameList *params = &stmt->as.func.params;
+  for (int i = 0; i < params->count; i++) add_local(params->items[i]);
+  compile_stmt(stmt->as.func.body);
+  emit_return();
+
+  current = compiler.enclosing;
+  return fn;
+}
+
+/* Like compile_function, but slot 0 is the receiver, reachable as `this`
+ * (instead of the anonymous callee slot a normal function reserves). */
+static ObjFunction *compile_method(Stmt *stmt) {
+  Compiler compiler;
+  ObjFunction *fn = function_new();
+  fn->name = stmt->as.func.name;
+  fn->arity = stmt->as.func.params.count;
+  init_compiler(&compiler, fn, current);
+  current->locals[0].name = string_copy("this", 4); /* interned: matches `this` */
 
   begin_scope();
   NameList *params = &stmt->as.func.params;

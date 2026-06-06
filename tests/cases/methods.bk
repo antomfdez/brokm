@@ -1,0 +1,45 @@
+// v0.8 methods: instance methods with an implicit `this` receiver.
+
+class Counter {
+  I64 n;
+  U0 Inc() { this.n = this.n + 1; }
+  U0 Add(I64 k) { this.n = this.n + k; }
+  I64 Get() { return this.n; }
+}
+
+Counter c = Counter(0);
+c.Inc();
+c.Inc();
+c.Add(5);
+"counter = %d\n", c.Get();          // 7
+
+// Reference semantics: a method mutates the shared instance.
+U0 Bump(Counter x) { x.Inc(); }
+Bump(c);
+"after bump = %d\n", c.Get();        // 8
+
+class Rect {
+  I64 w;
+  I64 h;
+  I64 Area() { return this.w * this.h; }
+  // A method calling a sibling method through `this`.
+  I64 AreaPlus(I64 k) { return this.Area() + k; }
+  U0 Scale(I64 f) { this.w = this.w * f; this.h = this.h * f; }
+}
+
+Rect r = Rect(3, 4);
+"area = %d\n", r.Area();             // 12
+"area+10 = %d\n", r.AreaPlus(10);    // 22
+r.Scale(2);
+"scaled area = %d\n", r.Area();      // 48
+
+// Methods returning instances / chaining via a local.
+class Point {
+  I64 x;
+  I64 y;
+  Point Moved(I64 dx, I64 dy) { return Point(this.x + dx, this.y + dy); }
+}
+
+Point p = Point(1, 1);
+Point q = p.Moved(2, 3);
+"moved = %d %d\n", q.x, q.y;         // 3 4

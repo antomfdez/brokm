@@ -66,6 +66,7 @@ typedef struct {
   ObjString *name;
   int fieldCount;
   ObjString **fields; /* declared field names, in order */
+  Table methods;      /* method name -> ObjFunction (receiver bound as `this`) */
 } ObjClass;
 
 typedef struct {

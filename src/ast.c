@@ -200,6 +200,7 @@ void free_stmt(Stmt *stmt) {
       FREE_ARRAY(Type, stmt->as.klass.fieldTypes, stmt->as.klass.fields.count);
       FREE_ARRAY(ObjString *, stmt->as.klass.fields.items,
                  stmt->as.klass.fields.capacity);
+      free_stmtlist(&stmt->as.klass.methods);
       break;
     case STMT_BREAK:
     case STMT_CONTINUE:

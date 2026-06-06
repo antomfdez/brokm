@@ -95,6 +95,13 @@ static void blacken_object(Obj *object) {
       for (int i = 0; i < klass->fieldCount; i++) {
         mark_object((Obj *)klass->fields[i]);
       }
+      for (int i = 0; i < klass->methods.capacity; i++) {
+        Entry *entry = &klass->methods.entries[i];
+        if (entry->key != NULL) {
+          mark_object((Obj *)entry->key);
+          mark_value(entry->value);
+        }
+      }
       break;
     }
     case OBJ_INSTANCE: {

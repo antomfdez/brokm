@@ -99,6 +99,7 @@ ObjClass *class_new(ObjString *name, int fieldCount) {
   klass->fieldCount = fieldCount;
   klass->fields = fieldCount > 0 ? ALLOCATE(ObjString *, fieldCount) : NULL;
   for (int i = 0; i < fieldCount; i++) klass->fields[i] = NULL;
+  table_init(&klass->methods);
   return klass;
 }
 
@@ -180,6 +181,7 @@ void object_free(Obj *obj) {
     case OBJ_CLASS: {
       ObjClass *c = (ObjClass *)obj;
       FREE_ARRAY(ObjString *, c->fields, c->fieldCount);
+      table_free(&c->methods);
       FREE(ObjClass, obj);
       break;
     }

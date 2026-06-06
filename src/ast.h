@@ -120,6 +120,7 @@ struct Stmt {
       ObjString *name;
       NameList fields;
       Type *fieldTypes; /* parallel to fields.items, length fields.count */
+      StmtList methods; /* each a STMT_FUNCTION; receiver is `this` */
     } klass;
   } as;
 };

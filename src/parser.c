@@ -736,16 +736,24 @@ static Stmt *class_declaration(void) {
   s->as.klass.name = name;
   s->as.klass.fieldTypes = NULL;
   namelist_init(&s->as.klass.fields);
+  stmtlist_init(&s->as.klass.methods);
 
   Type *fieldTypes = NULL;
   int ftCount = 0, ftCap = 0;
   consume(TOKEN_LBRACE, "Expect '{' before class body.");
   while (!check(TOKEN_RBRACE) && !check(TOKEN_EOF)) {
-    Type ft = parse_type_annotation("Expect field type.");
-    consume(TOKEN_IDENTIFIER, "Expect field name.");
-    namelist_write(&s->as.klass.fields, intern_token(parser.previous));
-    fieldTypes = push_type(fieldTypes, &ftCount, &ftCap, ft);
-    consume(TOKEN_SEMICOLON, "Expect ';' after field declaration.");
+    Type memberType = parse_type_annotation("Expect field or method type.");
+    consume(TOKEN_IDENTIFIER, "Expect field or method name.");
+    Token nameTok = parser.previous;
+    if (check(TOKEN_LPAREN)) {
+      /* A method: `RetType Name(params) { ... }`, receiver bound as `this`. */
+      stmtlist_write(&s->as.klass.methods,
+                     function_declaration(nameTok, memberType));
+    } else {
+      namelist_write(&s->as.klass.fields, intern_token(nameTok));
+      fieldTypes = push_type(fieldTypes, &ftCount, &ftCap, memberType);
+      consume(TOKEN_SEMICOLON, "Expect ';' after field declaration.");
+    }
   }
   consume(TOKEN_RBRACE, "Expect '}' after class body.");
   match(TOKEN_SEMICOLON); /* optional trailing ';' */

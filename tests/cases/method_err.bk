@@ -1,0 +1,10 @@
+// Accessing a member (field or method) the class does not define is caught
+// statically: `Missing` is neither a field nor a method of Box.
+class Box {
+  I64 v;
+  I64 Get() { return this.v; }
+}
+
+Box b = Box(42);
+"%d\n", b.Get();   // would print 42, but the program fails to compile
+b.Missing();       // unknown member -> static type error

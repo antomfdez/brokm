@@ -126,8 +126,39 @@ r.y = 99;                // ...so this also changes p.y
   (The class must be declared before use; array-of-class declarations like
   `Node[] xs` are not yet recognized — use an untyped `U0[]` list. See
   `examples/calc.bk` for a parser/AST built this way.)
-- `class` and `struct` are synonyms. There are no pointers or methods yet (see
-  the roadmap); behavior is written as free functions taking instances.
+- `class` and `struct` are synonyms. There are no raw pointers into instances
+  (see the roadmap); use methods or free functions taking instances.
+
+### Methods
+
+A class body may also declare **methods** — functions with an implicit receiver
+named `this`:
+
+```c
+class Counter {
+  I64 n;
+  U0  Inc()      { this.n = this.n + 1; }
+  U0  Add(I64 k) { this.n = this.n + k; }
+  I64 Get()      { return this.n; }
+}
+
+Counter c = Counter(0);
+c.Inc();           // call a method: obj.method(args)
+c.Add(5);
+"%d\n", c.Get();   // 6
+```
+
+- A method reads and writes the receiver's fields through `this` (e.g.
+  `this.n`), and calls a sibling method through `this` too (`this.Other()`).
+- Methods are declared inline in the class body; the leading type is the return
+  type (`U0` for none). They are distinguished from fields by the `(` after the
+  name.
+- Methods have **reference semantics** like any instance access — a method
+  mutates the shared instance.
+- Calling a name that is neither a field nor a method of the class is a static
+  error. Methods are not first-class yet: you call `obj.m(args)` in place; you
+  cannot store `obj.m` in a variable. (Deferred: inheritance, static methods,
+  a `self` alias.)
 
 ## Manual memory (low-level)
 
