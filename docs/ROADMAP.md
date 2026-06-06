@@ -315,8 +315,9 @@ Can brokm compile itself? Eventually, yes — and brokm now hosts the front-end 
 - **Methods ✅** (v0.8) — instance methods with `this`, so a compiler's data types can carry
   behavior.
 - **Modules ✅** (v0.10) — `#include "file"` splits a compiler across files.
-- **Still needed:** smaller parser conveniences (array-of-class declarations `Node[] xs`, forward
-  declarations).
+- **Parser conveniences ✅** (v0.10.1) — array-of-class declarations (`Node[] xs`) and forward
+  declarations (`RetType Name(params);`).
+- **The prerequisites are now in place** for step 3: a code generator written in brokm.
 - **Path:** lexer ✅ → parser/AST ✅ → a code generator emitting the existing bytecode (runnable
   on the current C VM), then — much later — a runtime in brokm, retiring the C bootstrap. The
   baseline JIT matters here: a self-hosted compiler is compute-heavy.

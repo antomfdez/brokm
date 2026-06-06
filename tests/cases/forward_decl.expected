@@ -1,0 +1,4 @@
+IsEven(10) = 1
+IsOdd(10)  = 0
+IsOdd(7)   = 1
+box.v      = 42

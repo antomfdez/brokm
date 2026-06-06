@@ -559,6 +559,9 @@ static void check_function(Stmt *stmt) {
   register_func(stmt->as.func.name, stmt->as.func.returnType,
                 stmt->as.func.paramTypes, stmt->as.func.params.count, false);
 
+  /* A forward declaration registers its signature but has no body to check. */
+  if (stmt->as.func.body == NULL) return;
+
   Type savedReturn = tc.currentReturn;
   tc.currentReturn = stmt->as.func.returnType;
   begin_scope();

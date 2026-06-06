@@ -561,6 +561,7 @@ static void compile_switch(Stmt *stmt) {
 }
 
 static void compile_function_decl(Stmt *stmt) {
+  if (stmt->as.func.body == NULL) return; /* forward declaration: nothing to emit */
   ObjFunction *fn = compile_function(stmt);
   emit_bytes(OP_CONSTANT, (U8)make_constant(OBJ_VAL(fn)));
   emit_bytes(OP_DEFINE_GLOBAL, identifier_constant(stmt->as.func.name));

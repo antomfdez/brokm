@@ -79,6 +79,14 @@ U0 Greet()        // U0 = returns nothing
 Functions are callable with parentheses: `Add(1, 2)`. Recursion is supported. Top-level
 code may appear before or after function definitions; calls execute at runtime in program order.
 
+A **forward declaration** (prototype) ends in `;` instead of a body, for C-style headers:
+
+```c
+I64 IsEven(I64 n);                  // prototype (no body)
+I64 IsOdd(I64 n)  { if (n == 0) return 0; return IsEven(n - 1); }
+I64 IsEven(I64 n) { if (n == 0) return 1; return IsOdd(n - 1); }
+```
+
 ## Printing (HolyC style)
 
 A statement that begins with a string literal is printed. Trailing comma-separated arguments
@@ -143,9 +151,11 @@ r.y = 99;                // ...so this also changes p.y
   }
   ```
 
-  (The class must be declared before use; array-of-class declarations like
-  `Node[] xs` are not yet recognized — use an untyped `U0[]` list. See
-  `examples/calc.bk` for a parser/AST built this way.)
+  (The class must be declared before use.) Array-of-class declarations work as
+  variables, parameters, fields, and return types — `Node[] xs = [Node(1)];`,
+  `I64 Sum(Node[] ns)`, etc. (Element types are gradual, so `Node[]` and `U0[]`
+  behave the same at runtime.) See `examples/calc.bk` for a parser/AST built
+  with these.
 - `class` and `struct` are synonyms. There are no raw pointers into instances
   (see the roadmap); use methods or free functions taking instances.
 

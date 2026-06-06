@@ -596,8 +596,13 @@ static Stmt *function_declaration(Token nameTok, Type returnType) {
   if (ptCap != ptCount) paramTypes = GROW_ARRAY(Type, paramTypes, ptCap, ptCount);
   s->as.func.paramTypes = paramTypes;
 
-  consume(TOKEN_LBRACE, "Expect '{' before function body.");
-  s->as.func.body = block();
+  /* A `;` here is a forward declaration (prototype) with no body. */
+  if (match(TOKEN_SEMICOLON)) {
+    s->as.func.body = NULL;
+  } else {
+    consume(TOKEN_LBRACE, "Expect '{' before function body.");
+    s->as.func.body = block();
+  }
   return s;
 }
 
@@ -769,18 +774,30 @@ static Stmt *class_var_declaration(void) {
   advance(); /* consume the class name into `previous` */
   ObjString *className = intern_token(parser.previous);
   int line = parser.previous.line;
+
+  /* An optional `[]` makes this an array-of-class declaration. */
+  bool isArray = false;
+  if (match(TOKEN_LBRACKET)) {
+    consume(TOKEN_RBRACKET, "Expect ']' in array type.");
+    isArray = true;
+  }
+  Type declared = isArray ? ty(TY_ARRAY) : ty_named(TY_INSTANCE, className);
+
   consume(TOKEN_IDENTIFIER, "Expect variable name.");
   Token nameTok = parser.previous;
   ObjString *name = intern_token(parser.previous);
 
   if (check(TOKEN_LPAREN)) {
-    return function_declaration(nameTok, ty_named(TY_INSTANCE, className));
+    return function_declaration(nameTok, declared); /* class- or array-typed fn */
   }
 
   Expr *init;
   if (match(TOKEN_EQ)) {
     init = expression();
+  } else if (isArray) {
+    init = NULL; /* an uninitialized array slot is nil, like `U0[] xs;` */
   } else {
+    /* `Node p;` default-constructs the instance via a `ClassName()` call. */
     init = expr_new(EXPR_CALL, line);
     init->as.call.callee = make_variable(className, line);
     exprlist_init(&init->as.call.args);
@@ -790,7 +807,7 @@ static Stmt *class_var_declaration(void) {
   Stmt *s = stmt_new(STMT_VAR, line);
   s->as.var.name = name;
   s->as.var.init = init;
-  s->as.var.declared = ty_named(TY_INSTANCE, className);
+  s->as.var.declared = declared;
   return s;
 }
 
@@ -835,8 +852,8 @@ static Stmt *declaration(void) {
     s = class_declaration();
   } else if (match(TOKEN_TYPE)) {
     s = typed_declaration();
-  } else if (check(TOKEN_IDENTIFIER) && check_next(TOKEN_IDENTIFIER) &&
-             current_is_class()) {
+  } else if (check(TOKEN_IDENTIFIER) && current_is_class() &&
+             (check_next(TOKEN_IDENTIFIER) || check_next(TOKEN_LBRACKET))) {
     s = class_var_declaration();
   } else {
     s = statement();

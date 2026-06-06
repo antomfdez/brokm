@@ -1,0 +1,26 @@
+// v0.10.1: forward declarations (prototypes) — `RetType Name(params);` with no
+// body is now accepted (previously a syntax error). The real definition follows.
+
+I64 IsEven(I64 n);   // forward declaration
+
+I64 IsOdd(I64 n) {
+  if (n == 0) return 0;
+  return IsEven(n - 1);
+}
+
+I64 IsEven(I64 n) {  // definition, matching the prototype above
+  if (n == 0) return 1;
+  return IsOdd(n - 1);
+}
+
+"IsEven(10) = %d\n", IsEven(10);   // 1
+"IsOdd(10)  = %d\n", IsOdd(10);    // 0
+"IsOdd(7)   = %d\n", IsOdd(7);     // 1
+
+// A prototype for a class-returning function works too.
+class Box { I64 v; }
+Box MakeBox(I64 v);
+
+Box MakeBox(I64 v) { return Box(v); }
+Box b = MakeBox(42);
+"box.v      = %d\n", b.v;          // 42
