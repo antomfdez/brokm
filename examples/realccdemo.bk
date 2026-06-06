@@ -24,3 +24,17 @@ U0 parityProg = Compile("
   }
 ");
 parityProg();                                           // -1 2 -3 4 -5 6 -7
+
+// Function definitions, recursion, and mutual recursion (step 6). Parameters
+// live in real local slots, so recursion works.
+U0 fnProg = Compile("
+  func fib(n)  { if (n < 2) { return n; } return fib(n - 1) + fib(n - 2); }
+  func fact(n) { if (n < 2) { return 1; } return n * fact(n - 1); }
+  func even(n) { if (n == 0) { return 1; } return odd(n - 1); }
+  func odd(n)  { if (n == 0) { return 0; } return even(n - 1); }
+  print fib(10);
+  print fact(6);
+  print even(10);
+  print odd(10);
+");
+fnProg();                                               // 55 720 1 0

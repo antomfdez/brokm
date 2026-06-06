@@ -492,11 +492,13 @@ static Value native_opcode(int argc, Value *args) {
   return INT_VAL(-1);
 }
 
-/* Assemble(code, consts) -> callable ObjFunction. `code` is an array of bytes
- * (opcodes and single-byte operands); `consts` is the constant pool, indexed
- * positionally to match the array order the brokm codegen built. The function
- * is marked jitDisabled: dynamically assembled bytecode is run-once and is not
- * worth (nor safe to blindly walk for) JIT compilation. */
+/* Assemble(code, consts [, arity]) -> callable ObjFunction. `code` is an array
+ * of bytes (opcodes and single-byte operands); `consts` is the constant pool,
+ * indexed positionally to match the array order the brokm codegen built; the
+ * optional `arity` (default 0) sets the parameter count for OP_CALL checks, so
+ * brokm can assemble functions, not just scripts. The function is marked
+ * jitDisabled: dynamically assembled bytecode is run-once and is not worth (nor
+ * safe to blindly walk for) JIT compilation. */
 static Value native_assemble(int argc, Value *args) {
   if (argc < 2 || !IS_ARRAY(args[0]) || !IS_ARRAY(args[1])) return NIL_VAL;
   ValueArray *code = &AS_ARRAY(args[0])->elements;
@@ -504,6 +506,7 @@ static Value native_assemble(int argc, Value *args) {
 
   ObjFunction *fn = function_new();
   vm_push(OBJ_VAL(fn)); /* root across name interning + chunk growth */
+  fn->arity = (argc >= 3 && IS_INT(args[2])) ? (int)AS_INT(args[2]) : 0;
   fn->name = string_copy("<asm>", 5);
   for (int i = 0; i < consts->count; i++) {
     chunk_add_constant(&fn->chunk, consts->values[i]);

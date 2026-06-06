@@ -345,10 +345,20 @@ Can brokm compile itself? Eventually, yes — and brokm now hosts the front-end 
   with **no C changes**. `examples/realccdemo.bk` is the demo; `tests/cases/selfhost3.bk` exercises
   nested `if/else`, `while`, and every comparison operator as a deterministic check of the generated
   jumps, byte-identical on the interpreter, the JIT, and under GC stress.
-- **Path:** lexer ✅ → parser/AST ✅ → code generator ✅ → real bytecode ✅ → control flow ✅ → next,
-  function definitions (assemble nested `ObjFunction` constants with arity, emit `OP_CALL`) so a full
-  brokm front-end can target the C VM, then — much later — a runtime in brokm, retiring the C
-  bootstrap. The baseline JIT matters here: a self-hosted compiler is compute-heavy.
+- **Step 6 — functions ✅.** `examples/realcc.bk` grew **function definitions** with parameters,
+  recursion, mutual recursion, and calls. Each `func` body is compiled to its **own** chunk and
+  packed by `Assemble(code, consts, arity)` (the only C change — an optional arity argument) into a
+  real, callable `ObjFunction`, which is stored as a **constant of the enclosing chunk** and bound
+  with `OP_DEFINE_GLOBAL`; calls emit `OP_CALL`. Parameters live in **real local slots** (1..arity;
+  slot 0 is the function itself), so recursion works. The code generator saves/restores its emit
+  buffers and parameter scope around each nested function. `tests/cases/selfhost4.bk` checks `fib`,
+  factorial, two-argument calls, mutual recursion, a loop-with-locals, and nested calls — all
+  byte-identical on the interpreter, the JIT, and under GC stress.
+- **Path:** lexer ✅ → parser/AST ✅ → code generator ✅ → real bytecode ✅ → control flow ✅ →
+  functions ✅. The in-brokm compiler now has the shape of a real language back-end. Next, grow the
+  source language toward brokm's own (locals, types, aggregates) and feed it brokm source, then —
+  much later — a runtime in brokm, retiring the C bootstrap. The baseline JIT matters here: a
+  self-hosted compiler is compute-heavy.
 
 ## Language features tracked across milestones
 

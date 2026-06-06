@@ -1,0 +1,28 @@
+// selfhost4.bk — self-hosting step 6: a brokm program compiles a language with
+// FUNCTION DEFINITIONS (parameters, recursion, mutual recursion, calls) to the
+// C VM's real bytecode and runs it directly. Each function is assembled into
+// its own real ObjFunction (with arity), stored as a constant of the enclosing
+// chunk, and called via OP_CALL; parameters use real local slots so recursion
+// works. #includes the compiler across directories (v0.10 modules).
+//
+// Expected output: 55 (fib10), 720 (6!), 7 (add), 1 (even10), 1 (odd7),
+// 5050 (sum1..100), 19 (add(fact3=6, fib7=13)).
+#include "../../examples/realcc.bk"
+
+U0 prog = Compile("
+  func fib(n)    { if (n < 2) { return n; } return fib(n - 1) + fib(n - 2); }
+  func fact(n)   { if (n < 2) { return 1; } return n * fact(n - 1); }
+  func add(a, b) { return a + b; }
+  func even(n)   { if (n == 0) { return 1; } return odd(n - 1); }
+  func odd(n)    { if (n == 0) { return 0; } return even(n - 1); }
+  func sumto(n)  { s = 0; i = 1; while (i <= n) { s = s + i; i = i + 1; } return s; }
+
+  print fib(10);
+  print fact(6);
+  print add(3, 4);
+  print even(10);
+  print odd(7);
+  print sumto(100);
+  print add(fact(3), fib(7));
+");
+prog();
