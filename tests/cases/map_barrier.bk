@@ -1,0 +1,10 @@
+// Write-barrier exercise for maps. A minor collection skips the old generation,
+// so a young value reachable only through an old map survives ONLY if map_set's
+// write barrier recorded that old->young edge. (Compile with
+// -DBK_NO_WRITE_BARRIER to see this fail.)
+U0 box = MapNew();
+GcMinor();                  // box (a global root) is promoted to the old generation
+MapSet(box, "k", "ba" + "rk");  // young string stored into the now-old map
+GcMinor();                  // minor skips old box; barrier keeps "bark" alive
+GcMinor();
+"%s\n", MapGet(box, "k");

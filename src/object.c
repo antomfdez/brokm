@@ -110,6 +110,18 @@ ObjInstance *instance_new(ObjClass *klass) {
   return instance;
 }
 
+ObjMap *map_new(void) {
+  ObjMap *map = (ObjMap *)allocate_object(sizeof(ObjMap), OBJ_MAP);
+  table_init(&map->table);
+  return map;
+}
+
+void map_set(ObjMap *map, ObjString *key, Value value) {
+  table_set(&map->table, key, value);
+  /* The store may create an old-map -> young-value edge. */
+  gc_write_barrier((Obj *)map, value);
+}
+
 static void print_function(ObjFunction *function) {
   if (function->name == NULL) {
     printf("<script>");
@@ -137,6 +149,7 @@ void object_print(Value v) {
     case OBJ_INSTANCE:
       printf("<%s instance>", AS_INSTANCE(v)->klass->name->chars);
       break;
+    case OBJ_MAP:      printf("<map>"); break;
     default:           printf("<obj>"); break;
   }
 }
@@ -174,6 +187,12 @@ void object_free(Obj *obj) {
       ObjInstance *inst = (ObjInstance *)obj;
       table_free(&inst->fields);
       FREE(ObjInstance, obj);
+      break;
+    }
+    case OBJ_MAP: {
+      ObjMap *map = (ObjMap *)obj;
+      table_free(&map->table);
+      FREE(ObjMap, obj);
       break;
     }
   }

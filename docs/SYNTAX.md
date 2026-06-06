@@ -184,6 +184,26 @@ Math (`Abs`/`Min`/`Max` preserve int-vs-float; the rest return `F64`):
 
 See `examples/lexer.bk` for a tokenizer written in brokm using these.
 
+### Maps (v0.7)
+
+A string-keyed hash map — the building block for symbol tables. Keys are strings;
+values are any value. Missing keys read back as `NULL`.
+
+- `MapNew()` — a new empty map.
+- `MapSet(m, key, value)` — insert or overwrite; returns the map.
+- `MapGet(m, key)` — the value for `key`, or `NULL` if absent.
+- `MapHas(m, key)` — `Bool`: is `key` present?
+- `MapDelete(m, key)` — `Bool`: remove `key`, true if it was present.
+- `MapLen(m)` — number of live entries.
+- `MapKeys(m)` — a new array of the keys (order unspecified).
+
+```c
+U0 counts = MapNew();
+MapSet(counts, "a", 1);
+if (MapHas(counts, "a")) MapSet(counts, "a", MapGet(counts, "a") + 1);
+"%d\n", MapGet(counts, "a");   // 2
+```
+
 ## Control flow
 
 ```c

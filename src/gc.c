@@ -109,6 +109,17 @@ static void blacken_object(Obj *object) {
       }
       break;
     }
+    case OBJ_MAP: {
+      ObjMap *map = (ObjMap *)object;
+      for (int i = 0; i < map->table.capacity; i++) {
+        Entry *entry = &map->table.entries[i];
+        if (entry->key != NULL) {
+          mark_object((Obj *)entry->key); /* keys are strong, unlike vm.strings */
+          mark_value(entry->value);
+        }
+      }
+      break;
+    }
     case OBJ_STRING:
       break;
   }

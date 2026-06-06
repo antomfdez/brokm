@@ -169,6 +169,8 @@ static void register_natives(void) {
       "CharAt", "Chr",       "Substr",    "IndexOf", "ToInt",     "ToStr",
       "ReadFile", "WriteFile",
       "Abs",    "Min",       "Max",       "Sqrt",    "Pow",       "Floor", "Ceil",
+      /* v0.7 maps */
+      "MapNew", "MapSet",    "MapGet",    "MapHas",  "MapDelete", "MapLen", "MapKeys",
   };
   size_t n = sizeof(NAMES) / sizeof(NAMES[0]);
   for (size_t i = 0; i < n; i++) {

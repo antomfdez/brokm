@@ -5,12 +5,12 @@ language with a clean [HolyC](https://en.wikipedia.org/wiki/TempleOS#HolyC)-flav
 It is built primarily for its author's own use, with four design goals: **small, fast, robust,
 and easy to embed**.
 
-This is **v0.6**: a working bytecode VM with a precise, **generational** mark-sweep garbage
+This is **v0.7**: a working bytecode VM with a precise, **generational** mark-sweep garbage
 collector, aggregate types (arrays + classes/structs), an opt-in **manual-memory** mode for
 low-level work, a **static type checker** that validates the HolyC type annotations before
 any code runs, **typed bytecode** that specializes the int hot path, a **baseline JIT** that
-compiles hot functions to native code (**arm64 + x86-64**, with a full interpreter fallback), and
-a **standard library** (file I/O, strings, math) — enough to write a
+compiles hot functions to native code (**arm64 + x86-64**, with a full interpreter fallback),
+a **standard library** (file I/O, strings, math), and **string-keyed maps** — enough to write a
 [brokm tokenizer and parser in brokm](examples/calc.bk)
 (see [docs/ROADMAP.md](docs/ROADMAP.md)).
 
@@ -56,6 +56,8 @@ make debug        # ASan/UBSan + bytecode/exec tracing build
   (reference semantics).
 - **Manual memory**: `U0 b = MAlloc(32); PokeI64(b, 0, 42); Free(b);` — raw, GC-invisible
   buffers with typed peek/poke, plus `GcDisable`/`GcEnable`.
+- **Maps**: string-keyed hash maps — `U0 m = MapNew(); MapSet(m, "k", 1); MapGet(m, "k");`
+  with `MapHas`/`MapDelete`/`MapLen`/`MapKeys`.
 - **Control flow**: `if/else`, `while`, `for`, `do/while`, `switch/case/default`,
   `break`, `continue`, `return`.
 - **Operators**: `+ - * / %`, comparisons, `&& || !`, bitwise `& | ^ ~ << >>`,
@@ -96,7 +98,9 @@ library** of native builtins covers file I/O (`ReadFile`/`WriteFile`/`PrintErr`)
 (`CharAt`/`Chr`/`Substr`/`IndexOf`/`ToInt`/`ToStr`), and math
 (`Abs`/`Min`/`Max`/`Sqrt`/`Pow`/`Floor`/`Ceil`) — enough that `examples/lexer.bk` tokenizes and
 `examples/calc.bk` parses + evaluates brokm-flavored source written in brokm, the first steps
-toward self-hosting. Next up: a richer embedding API and multi-instance VMs — see the roadmap.
+toward self-hosting. **String-keyed maps** (`MapNew`/`MapGet`/`MapSet`/…) add the symbol-table
+primitive a self-hosted compiler needs, with their mutations exercising the write barrier
+red/green. Next up: a richer embedding API and multi-instance VMs — see the roadmap.
 
 ## License
 

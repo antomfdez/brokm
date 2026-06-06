@@ -197,6 +197,26 @@ JIT, and `-DBK_NO_JIT`, and under GC stress (`tests/cases/stdlib.bk`, `io.bk`).
 **multi-instance VMs** (replacing the global `VM vm` — a cross-cutting refactor), and a formal
 language spec.
 
+## v0.7 — Maps ✅ (done)
+
+A built-in **string-keyed hash map** (`ObjMap`), the symbol-table primitive self-hosting needs.
+Structurally an `Obj` wrapping the existing string `Table` (`table.c`) — the same shape as an
+`ObjInstance`'s field table, but with keys supplied at runtime — so the bytecode compiler, VM
+opcodes, and JIT are unchanged (maps are reached only through native calls, which JIT'd code
+already routes through `jit_h_call`).
+
+- **API (natives):** `MapNew`, `MapSet(m, k, v)`, `MapGet(m, k)` (→ value or `NULL`),
+  `MapHas`, `MapDelete`, `MapLen` (live entries, tombstones excluded), `MapKeys` (→ array).
+- **GC.** Map keys and values are strong roots, marked like instance fields. `map_set` applies
+  the generational **write barrier** for old-map → young-value edges — load-bearing and verified
+  red/green by `tests/cases/map_barrier.bk` (it prints `bark` on the default build and nothing
+  under `-DBK_NO_WRITE_BARRIER`), the same proof pattern as the array/field barrier tests.
+- **Verified** byte-identical across the interpreter, forced JIT (`BROKM_JIT_THRESHOLD=1`), and
+  `-DBK_NO_JIT`, and under GC stress (`tests/cases/map.bk`).
+
+**Deferred:** map literal syntax (`{...}`), non-string (any-value) keys, and in-language
+iteration sugar — each layers on without reworking this.
+
 ## Self-hosting (north star)
 
 Can brokm compile itself? Eventually, yes — and brokm now hosts the front-end of a compiler.
@@ -213,9 +233,9 @@ Can brokm compile itself? Eventually, yes — and brokm now hosts the front-end 
 
 - **Already enough:** functions/recursion, arrays, classes/structs (incl. self-referential),
   manual memory, strings + the string/IO stdlib.
-- **Still needed:** a map/hash type (writable in-language, but a builtin would help symbol
-  tables), modules / multi-file programs, methods (today: free functions over instances), and
-  smaller parser conveniences (array-of-class declarations `Node[] xs`, forward declarations).
+- **Map/hash type ✅** (v0.7) — `MapNew`/`MapGet`/`MapSet`/… give the symbol-table primitive.
+- **Still needed:** modules / multi-file programs, methods (today: free functions over instances),
+  and smaller parser conveniences (array-of-class declarations `Node[] xs`, forward declarations).
 - **Path:** lexer ✅ → parser/AST ✅ → a code generator emitting the existing bytecode (runnable
   on the current C VM), then — much later — a runtime in brokm, retiring the C bootstrap. The
   baseline JIT matters here: a self-hosted compiler is compute-heavy.

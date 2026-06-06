@@ -17,7 +17,8 @@ typedef enum {
   OBJ_NATIVE,
   OBJ_ARRAY,
   OBJ_CLASS,
-  OBJ_INSTANCE
+  OBJ_INSTANCE,
+  OBJ_MAP
 } ObjType;
 
 struct Obj {
@@ -73,6 +74,14 @@ typedef struct {
   Table fields; /* field name -> value */
 } ObjInstance;
 
+/* A string-keyed hash map exposed to brokm via the Map* natives. Structurally
+ * an ObjInstance without a class: an Obj wrapping the same string Table, but
+ * with keys supplied at runtime instead of declared field names. */
+typedef struct {
+  Obj obj;
+  Table table;
+} ObjMap;
+
 #define OBJ_TYPE(v)    (AS_OBJ(v)->type)
 #define IS_STRING(v)   object_is_type(v, OBJ_STRING)
 #define IS_FUNCTION(v) object_is_type(v, OBJ_FUNCTION)
@@ -80,6 +89,7 @@ typedef struct {
 #define IS_ARRAY(v)    object_is_type(v, OBJ_ARRAY)
 #define IS_CLASS(v)    object_is_type(v, OBJ_CLASS)
 #define IS_INSTANCE(v) object_is_type(v, OBJ_INSTANCE)
+#define IS_MAP(v)      object_is_type(v, OBJ_MAP)
 #define AS_STRING(v)   ((ObjString *)AS_OBJ(v))
 #define AS_CSTRING(v)  (((ObjString *)AS_OBJ(v))->chars)
 #define AS_FUNCTION(v) ((ObjFunction *)AS_OBJ(v))
@@ -87,6 +97,7 @@ typedef struct {
 #define AS_ARRAY(v)    ((ObjArray *)AS_OBJ(v))
 #define AS_CLASS(v)    ((ObjClass *)AS_OBJ(v))
 #define AS_INSTANCE(v) ((ObjInstance *)AS_OBJ(v))
+#define AS_MAP(v)      ((ObjMap *)AS_OBJ(v))
 
 static inline bool object_is_type(Value v, ObjType type) {
   return IS_OBJ(v) && AS_OBJ(v)->type == type;
@@ -102,6 +113,8 @@ ObjArray *array_new(void);
 void array_append(ObjArray *array, Value value); /* applies the GC write barrier */
 ObjClass *class_new(ObjString *name, int fieldCount);
 ObjInstance *instance_new(ObjClass *klass);
+ObjMap *map_new(void);
+void map_set(ObjMap *map, ObjString *key, Value value); /* applies the GC write barrier */
 
 void object_print(Value v);
 void object_free(Obj *obj);  /* free one object (used by the GC sweep) */

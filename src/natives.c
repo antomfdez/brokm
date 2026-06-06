@@ -157,6 +157,67 @@ static Value native_append(int argc, Value *args) {
   return args[0];
 }
 
+/* ---- maps -----------------------------------------------------------------
+ * A string-keyed hash map (ObjMap wrapping the VM's string Table). Keys are
+ * interned strings; values are any value. MapGet of a missing key is NULL. */
+
+static Value native_map_new(int argc, Value *args) {
+  (void)argc;
+  (void)args;
+  return OBJ_VAL(map_new());
+}
+
+static Value native_map_set(int argc, Value *args) {
+  if (argc < 3 || !IS_MAP(args[0]) || !IS_STRING(args[1])) return NIL_VAL;
+  map_set(AS_MAP(args[0]), AS_STRING(args[1]), args[2]);
+  return args[0];
+}
+
+static Value native_map_get(int argc, Value *args) {
+  if (argc < 2 || !IS_MAP(args[0]) || !IS_STRING(args[1])) return NIL_VAL;
+  Value out;
+  if (table_get(&AS_MAP(args[0])->table, AS_STRING(args[1]), &out)) return out;
+  return NIL_VAL;
+}
+
+static Value native_map_has(int argc, Value *args) {
+  if (argc < 2 || !IS_MAP(args[0]) || !IS_STRING(args[1])) return BOOL_VAL(false);
+  Value out;
+  return BOOL_VAL(table_get(&AS_MAP(args[0])->table, AS_STRING(args[1]), &out));
+}
+
+static Value native_map_delete(int argc, Value *args) {
+  if (argc < 2 || !IS_MAP(args[0]) || !IS_STRING(args[1])) return BOOL_VAL(false);
+  return BOOL_VAL(table_delete(&AS_MAP(args[0])->table, AS_STRING(args[1])));
+}
+
+/* The table's `count` includes tombstones (it drives the load factor), so scan
+ * for live entries to report the user-visible size. */
+static Value native_map_len(int argc, Value *args) {
+  if (argc < 1 || !IS_MAP(args[0])) return INT_VAL(0);
+  Table *t = &AS_MAP(args[0])->table;
+  I64 live = 0;
+  for (int i = 0; i < t->capacity; i++) {
+    if (t->entries[i].key != NULL) live++;
+  }
+  return INT_VAL(live);
+}
+
+/* MapKeys(map) - a new array of the map's keys (order unspecified). */
+static Value native_map_keys(int argc, Value *args) {
+  if (argc < 1 || !IS_MAP(args[0])) return NIL_VAL;
+  Table *t = &AS_MAP(args[0])->table;
+  ObjArray *keys = array_new();
+  /* Root the array: each array_append may allocate and trigger a collection. */
+  vm_push(OBJ_VAL(keys));
+  for (int i = 0; i < t->capacity; i++) {
+    Entry *entry = &t->entries[i];
+    if (entry->key != NULL) array_append(keys, OBJ_VAL(entry->key));
+  }
+  vm_pop();
+  return OBJ_VAL(keys);
+}
+
 /* ---- manual memory --------------------------------------------------------
  * Raw, GC-invisible memory for low-level work. MAlloc returns a VAL_PTR that
  * the collector never tracks or follows; it lives until Free. Access is by
@@ -404,6 +465,13 @@ void natives_register(void) {
   vm_define_native("GcEnable", native_gc_enable);
   vm_define_native("Len", native_len);
   vm_define_native("Append", native_append);
+  vm_define_native("MapNew", native_map_new);
+  vm_define_native("MapSet", native_map_set);
+  vm_define_native("MapGet", native_map_get);
+  vm_define_native("MapHas", native_map_has);
+  vm_define_native("MapDelete", native_map_delete);
+  vm_define_native("MapLen", native_map_len);
+  vm_define_native("MapKeys", native_map_keys);
   vm_define_native("MAlloc", native_malloc);
   vm_define_native("Free", native_free);
   vm_define_native("PeekU8", native_peek_u8);

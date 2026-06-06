@@ -1,0 +1,49 @@
+// v0.7 maps: a string-keyed hash map via the Map* natives.
+
+U0 m = MapNew();
+"empty len     = %d\n", MapLen(m);            // 0
+
+MapSet(m, "one", 1);
+MapSet(m, "two", 2);
+MapSet(m, "three", 3);
+"len           = %d\n", MapLen(m);            // 3
+"get two       = %d\n", MapGet(m, "two");     // 2
+"has three     = %d\n", MapHas(m, "three");   // 1 (TRUE)
+"has missing   = %d\n", MapHas(m, "nope");    // 0 (FALSE)
+
+// Missing key reads back as NULL.
+U0 g = MapGet(m, "nope");
+"missing==NULL = %d\n", g == NULL;            // 1
+
+// Overwrite an existing key (len unchanged, value replaced).
+MapSet(m, "two", 22);
+"overwrite     = %d len %d\n", MapGet(m, "two"), MapLen(m); // 22 len 3
+
+// Delete shrinks the map and the key goes missing.
+"delete hit    = %d\n", MapDelete(m, "one");  // 1
+"delete miss   = %d\n", MapDelete(m, "one");  // 0
+"len after del = %d\n", MapLen(m);            // 2
+"has one       = %d\n", MapHas(m, "one");     // 0
+
+// String values work too (strings are interned, == compares content).
+MapSet(m, "name", "brokm");
+"string val    = %s\n", MapGet(m, "name");    // brokm
+
+// MapKeys returns an array of the live keys (order unspecified, count is not).
+U0 ks = MapKeys(m);
+"keys count    = %d\n", Len(ks);              // 3 (two, three, name)
+
+// Symbol-table style word count over a fixed list.
+U0[] words = ["a", "b", "a", "c", "b", "a"];
+U0 counts = MapNew();
+I64 i = 0;
+while (i < Len(words)) {
+  U0 w = words[i];
+  if (MapHas(counts, w)) {
+    MapSet(counts, w, MapGet(counts, w) + 1);
+  } else {
+    MapSet(counts, w, 1);
+  }
+  i = i + 1;
+}
+"count a=%d b=%d c=%d\n", MapGet(counts, "a"), MapGet(counts, "b"), MapGet(counts, "c");

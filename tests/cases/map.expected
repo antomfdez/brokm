@@ -1,0 +1,14 @@
+empty len     = 0
+len           = 3
+get two       = 2
+has three     = 1
+has missing   = 0
+missing==NULL = 1
+overwrite     = 22 len 3
+delete hit    = 1
+delete miss   = 0
+len after del = 2
+has one       = 0
+string val    = brokm
+keys count    = 3
+count a=3 b=2 c=1
