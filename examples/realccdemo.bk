@@ -38,3 +38,14 @@ U0 fnProg = Compile("
   print odd(10);
 ");
 fnProg();                                               // 55 720 1 0
+
+// Function-scoped local variables (step 7): `a` and `m` are per-call locals,
+// so these recursive functions — which read a temporary across a recursive
+// call — give the right answers instead of clobbering a shared global.
+U0 localProg = Compile("
+  func fibm(n) { if (n < 2) { return n; } a = fibm(n - 1); b = fibm(n - 2); return a + b; }
+  func fac(n)  { if (n <= 1) { return 1; } m = n; return fac(n - 1) * m; }
+  print fibm(12);
+  print fac(7);
+");
+localProg();                                            // 144 5040

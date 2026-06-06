@@ -354,10 +354,19 @@ Can brokm compile itself? Eventually, yes — and brokm now hosts the front-end 
   buffers and parameter scope around each nested function. `tests/cases/selfhost4.bk` checks `fib`,
   factorial, two-argument calls, mutual recursion, a loop-with-locals, and nested calls — all
   byte-identical on the interpreter, the JIT, and under GC stress.
+- **Step 7 — local variables ✅.** `examples/realcc.bk` gained **function-scoped locals**: a
+  non-parameter variable assigned inside a function now lives in a real local slot, not a global.
+  The generator pre-scans each body for assigned names (recursing through `if`/`while`), hoists them
+  into slots after the parameters, and reserves each with a nil push at entry — so a slot exists
+  regardless of which branch runs. This fixes a real defect: a recursive function's temporaries used
+  to leak into the global namespace and clobber each other across calls (`fac(5)` returned 16
+  instead of 120). `tests/cases/selfhost5.bk` checks cases that are only correct with per-call
+  locals — a temporary surviving a second recursive call, and a value read after a recursive call —
+  with **no C changes** at all. Top-level variables remain globals, matching brokm.
 - **Path:** lexer ✅ → parser/AST ✅ → code generator ✅ → real bytecode ✅ → control flow ✅ →
-  functions ✅. The in-brokm compiler now has the shape of a real language back-end. Next, grow the
-  source language toward brokm's own (locals, types, aggregates) and feed it brokm source, then —
-  much later — a runtime in brokm, retiring the C bootstrap. The baseline JIT matters here: a
+  functions ✅ → locals ✅. The in-brokm compiler is now a real, if small, language back-end. Next,
+  grow the source language toward brokm's own (types, aggregates, strings) and feed it brokm source,
+  then — much later — a runtime in brokm, retiring the C bootstrap. The baseline JIT matters here: a
   self-hosted compiler is compute-heavy.
 
 ## Language features tracked across milestones

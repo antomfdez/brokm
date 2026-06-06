@@ -1,0 +1,27 @@
+// selfhost5.bk — self-hosting step 7: function-scoped LOCAL VARIABLES in the
+// in-brokm real-bytecode compiler. Non-parameter variables assigned inside a
+// function now live in real local slots (hoisted and nil-reserved at entry),
+// not globals, so a recursive function's temporaries are per-call.
+//
+// Each program below would print the WRONG answer if locals were globals:
+//   - fibm: the temp `a` must survive the SECOND recursive call (fibm(n-2)),
+//     which a shared global would clobber.
+//   - fac:  `m` is read AFTER the recursive call (fac(n-1) * m), so a shared
+//     global would already hold a deeper frame's value.
+// tri exercises iterative locals in a loop. #includes across directories.
+//
+// Expected output: 55 (fibm10), 610 (fibm15), 720 (6!), 3628800 (10!), 55 (tri10).
+#include "../../examples/realcc.bk"
+
+U0 prog = Compile("
+  func fibm(n) { if (n < 2) { return n; } a = fibm(n - 1); b = fibm(n - 2); return a + b; }
+  func fac(n)  { if (n <= 1) { return 1; } m = n; return fac(n - 1) * m; }
+  func tri(n)  { s = 0; i = 1; while (i <= n) { s = s + i; i = i + 1; } return s; }
+
+  print fibm(10);
+  print fibm(15);
+  print fac(6);
+  print fac(10);
+  print tri(10);
+");
+prog();

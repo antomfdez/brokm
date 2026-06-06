@@ -1,7 +1,9 @@
 // realcc.bk — a small imperative language compiled to brokm's REAL bytecode.
-// Self-hosting steps 4-6: from the Opcode/Assemble bridge (step 4) through
-// control flow (step 5) to FUNCTION DEFINITIONS with parameters, recursion, and
-// calls (step 6).
+// Self-hosting steps 4-7: from the Opcode/Assemble bridge (step 4) through
+// control flow (step 5), FUNCTION DEFINITIONS with parameters, recursion, and
+// calls (step 6), to function-scoped LOCAL VARIABLES (step 7) — so a recursive
+// function's temporaries no longer leak into (and clobber each other through)
+// the global namespace.
 //
 // A function definition is compiled to its OWN chunk and packed — via
 // Assemble(code, consts, arity) — into a real, callable ObjFunction, which is
@@ -266,26 +268,39 @@ I64 ROP_NIL           = Opcode("NIL");
 I64 ROP_RETURN        = Opcode("RETURN");
 
 // ---- emit buffers + helpers ------------------------------------------------
-// rcode/rconsts are the chunk being built; curParams is the parameter-name list
-// of the function currently being compiled (NULL at top level). GenFunction
-// saves and restores all three so nested functions compile into their own
-// chunks.
+// rcode/rconsts are the chunk being built; curLocals is the local-name list of
+// the function currently being compiled (parameters first, then any variable
+// assigned in the body), or NULL at top level where variables are globals.
+// GenFunction saves and restores all three so nested functions compile into
+// their own chunks.
 U0[] rcode    = [];
 U0[] rconsts  = [];
-U0[] curParams = NULL;
+U0[] curLocals = NULL;
 
 I64 AddConst(U0 v)           { I64 i = Len(rconsts); Append(rconsts, v); return i; }
 U0  Emit(I64 op)             { Append(rcode, op); }
 U0  EmitArg(I64 op, I64 arg) { Append(rcode, op); Append(rcode, arg); }
 
-// Parameter slot for `name` (1..arity), or -1 if it is not a parameter (and so
-// resolves to a global). Slot 0 is the function itself.
-I64 ParamSlot(U8 name)
+I64 Contains(U0[] names, U8 name)
 {
-  if (curParams == NULL) return -1;
+  if (names == NULL) return 0;
   I64 i = 0;
-  while (i < Len(curParams)) {
-    if (curParams[i] == name) return i + 1;
+  while (i < Len(names)) {
+    if (names[i] == name) return 1;
+    i = i + 1;
+  }
+  return 0;
+}
+
+// Local slot for `name` (1..localCount), or -1 if it is not a local (and so
+// resolves to a global). Slot 0 is the function itself; parameters occupy the
+// first slots, additional locals follow.
+I64 LocalSlot(U8 name)
+{
+  if (curLocals == NULL) return -1;
+  I64 i = 0;
+  while (i < Len(curLocals)) {
+    if (curLocals[i] == name) return i + 1;
     i = i + 1;
   }
   return -1;
@@ -337,8 +352,8 @@ I64 BinOpcode(I64 c)
 U0 GenExpr(Node n)
 {
   if (n.op == 256) { EmitArg(ROP_CONSTANT, AddConst(n.val)); return; }
-  if (n.op == 257) {                          // variable: local param or global
-    I64 slot = ParamSlot(n.name);
+  if (n.op == 257) {                          // variable: local or global
+    I64 slot = LocalSlot(n.name);
     if (slot >= 0) EmitArg(ROP_GET_LOCAL, slot);
     else           EmitArg(ROP_GET_GLOBAL, AddConst(n.name));
     return;
@@ -363,7 +378,7 @@ U0 GenStmt(Stmt s)
 {
   if (s.kind == 0) {                          // name = expr
     GenExpr(s.expr);
-    I64 slot = ParamSlot(s.name);
+    I64 slot = LocalSlot(s.name);
     if (slot >= 0) { EmitArg(ROP_SET_LOCAL, slot); Emit(ROP_POP); } // SET_LOCAL leaves value
     else           EmitArg(ROP_DEFINE_GLOBAL, AddConst(s.name));
     return;
@@ -417,26 +432,59 @@ U0 GenStmts(U0[] stmts)
   }
 }
 
-// Compile a function body into its own real ObjFunction value. The current
-// chunk buffers and parameter scope are saved and restored around it, so this
-// is reentrant for nested/sibling functions.
+// Collect the names assigned anywhere in a statement list (recursing into if /
+// while bodies, but not into nested function definitions) that are not already
+// known, appending them to `locals`. These become hoisted function-scoped
+// locals, so control flow can't leave a slot uninitialized.
+U0 CollectLocals(U0[] stmts, U0[] locals)
+{
+  I64 i = 0;
+  while (i < Len(stmts)) {
+    Stmt s = stmts[i];
+    if (s.kind == 0) {                                  // assignment target
+      if (!Contains(locals, s.name)) Append(locals, s.name);
+    } else if (s.kind == 2) {                           // if: then + else
+      CollectLocals(s.thenB, locals);
+      if (s.elseB != NULL) CollectLocals(s.elseB, locals);
+    } else if (s.kind == 3) {                           // while: body
+      CollectLocals(s.thenB, locals);
+    }
+    i = i + 1;
+  }
+}
+
+// Compile a function body into its own real ObjFunction value. Locals are the
+// parameters followed by every other assigned name, all addressed by slot;
+// non-parameter locals are reserved at entry with a nil push so their stack
+// slots exist regardless of control flow. The current chunk buffers and local
+// scope are saved and restored, so this is reentrant for sibling functions.
 U0 GenFunction(Stmt fn)
 {
   U0[] savedCode   = rcode;
   U0[] savedConsts = rconsts;
-  U0[] savedParams = curParams;
+  U0[] savedLocals = curLocals;
 
-  rcode     = [];
-  rconsts   = [];
-  curParams = fn.params;
+  rcode   = [];
+  rconsts = [];
+  I64 arity = Len(fn.params);
+  U0[] locals = [];
+  I64 i = 0;
+  while (i < arity) { Append(locals, fn.params[i]); i = i + 1; }
+  CollectLocals(fn.thenB, locals);   // params first, then body-assigned names
+  curLocals = locals;
+
+  I64 extra = Len(locals) - arity;   // reserve a slot per non-parameter local
+  i = 0;
+  while (i < extra) { Emit(ROP_NIL); i = i + 1; }
+
   GenStmts(fn.thenB);
-  Emit(ROP_NIL);                  // implicit `return 0` if control falls off
+  Emit(ROP_NIL);                     // implicit `return 0` if control falls off
   Emit(ROP_RETURN);
-  U0 fnval = Assemble(rcode, rconsts, Len(fn.params));
+  U0 fnval = Assemble(rcode, rconsts, arity);
 
   rcode     = savedCode;
   rconsts   = savedConsts;
-  curParams = savedParams;
+  curLocals = savedLocals;
   return fnval;
 }
 
@@ -447,7 +495,7 @@ U0 Compile(U8 src)
   U0[] stmts = Parse(src);
   rcode     = [];
   rconsts   = [];
-  curParams = NULL;
+  curLocals = NULL;
   GenStmts(stmts);
   Emit(ROP_NIL);
   Emit(ROP_RETURN);
