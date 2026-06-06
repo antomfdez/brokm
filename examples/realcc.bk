@@ -1,9 +1,14 @@
 // realcc.bk — a small imperative language compiled to brokm's REAL bytecode.
-// Self-hosting steps 4-9: from the Opcode/Assemble bridge (step 4) through
+// Self-hosting steps 4-10: from the Opcode/Assemble bridge (step 4) through
 // control flow (step 5), FUNCTION DEFINITIONS with parameters, recursion, and
 // calls (step 6), function-scoped LOCAL VARIABLES (step 7), ARRAYS with the
-// native stdlib in reach (step 8), to STRING literals (step 9) — text values
-// that concatenate with `+` and print via the native `Print`.
+// native stdlib in reach (step 8), STRING literals (step 9), to HolyC-style
+// TYPE ANNOTATIONS (step 10) — `I64 x = ...;` and `U0 f(I64 n) {...}`, parsed
+// and discarded (gradual, like brokm). Maps come for free via the native
+// MapNew/MapSet/MapGet through the call path.
+//
+// Both the typed (`I64 x = e;`, `U0 f(I64 n){...}`) and untyped (`x = e;`,
+// `func f(n){...}`) declaration forms are accepted, so this is a superset.
 //
 // A function definition is compiled to its OWN chunk and packed — via
 // Assemble(code, consts, arity) — into a real, callable ObjFunction, which is
@@ -132,6 +137,14 @@ Node MakeIndex(Node b, Node idx)     { return Node(302, 0, NULL, b, idx, NULL); 
 
 I64 IsCompare(I64 k) {
   return k == 60 || k == 62 || k == 280 || k == 281 || k == 282 || k == 283;
+}
+
+// brokm scalar/aggregate type keywords. Accepted as declaration prefixes and
+// then ignored: like brokm itself, the toy language is gradually typed, so the
+// annotation is for syntax compatibility, not a runtime constraint.
+I64 IsTypeName(U8 w) {
+  return w == "I64" || w == "U0"  || w == "U8"  || w == "F64" || w == "Bool" ||
+         w == "I32" || w == "U32" || w == "I16" || w == "U16" || w == "I8";
 }
 
 Node ParseExpr();   // forward declaration
@@ -272,6 +285,42 @@ Stmt ParseStmt()
     Advance();                             // ';'
     return Stmt(1, NULL, e, NULL, NULL, NULL);
   }
+  // HolyC-style typed declaration: a type keyword (optionally with `[]`)
+  // followed by a name introduces a typed variable (`I64 x = expr;`, `U0[] a =
+  // ...;`, or `I64 x;` defaulting to 0) or a typed function
+  // (`U0 f(I64 a, U8 b) { ... }`). The types are parsed and discarded.
+  if (PeekKind() == 257 && IsTypeName(toks[pos].name) &&
+      (toks[pos + 1].kind == 257 || toks[pos + 1].kind == 91)) {
+    Advance();                              // return / variable type
+    if (PeekKind() == 91) { Advance(); Advance(); }  // optional `[]` array type
+    U8 nm = toks[pos].name;
+    Advance();                              // name
+    if (PeekKind() == 40) {                 // typed function
+      Advance();                            // '('
+      U0[] params = [];
+      if (PeekKind() != 41) {
+        if (IsTypeName(toks[pos].name)) { Advance(); if (PeekKind() == 91) { Advance(); Advance(); } }
+        Append(params, toks[pos].name); Advance();
+        while (PeekKind() == 44) {
+          Advance();
+          if (IsTypeName(toks[pos].name)) { Advance(); if (PeekKind() == 91) { Advance(); Advance(); } }
+          Append(params, toks[pos].name); Advance();
+        }
+      }
+      Advance();                            // ')'
+      U0[] body = ParseBlock();
+      return Stmt(5, nm, NULL, body, NULL, params, NULL);
+    }
+    if (PeekKind() == 61) {                 // typed var with initializer
+      Advance();                            // '='
+      Node e = ParseExpr();
+      Advance();                            // ';'
+      return Stmt(0, nm, e, NULL, NULL, NULL, NULL);
+    }
+    Advance();                              // ';'  — `Type name;` defaults to 0
+    return Stmt(0, nm, MakeNum(0), NULL, NULL, NULL, NULL);
+  }
+
   // Assignment or expression statement. Parse an expression; if '=' follows it
   // was an lvalue (a variable or an index target), otherwise it is a bare
   // expression statement (e.g. a call whose result is discarded).

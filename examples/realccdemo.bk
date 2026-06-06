@@ -83,3 +83,15 @@ U0 strProg = Compile("
   Print(\"5! = \"); print fact(5);
 ");
 strProg();                                              // hello, brokm! / 5! = 120
+
+// Type annotations + maps (step 10): brokm-style typed declarations, parsed and
+// discarded, alongside a string-keyed map built from the native stdlib.
+U0 typedProg = Compile("
+  U0 gcd(I64 a, I64 b) { while (b != 0) { I64 t = b; b = a % b; a = t; } return a; }
+  Print(\"gcd(48,36) = \"); print gcd(48, 36);
+
+  U0[] ages = MapNew();
+  MapSet(ages, \"ada\", 36);
+  Print(\"ada is \"); print MapGet(ages, \"ada\");
+");
+typedProg();                                            // gcd(48,36) = 12 / ada is 36

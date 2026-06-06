@@ -378,12 +378,21 @@ Can brokm compile itself? Eventually, yes — and brokm now hosts the front-end 
   arrays, and function parameters — once more with **no C changes**. `tests/cases/selfhost7.bk`
   prints text and concatenations, indexes an array of strings, and labels a computed `fib(10)` —
   byte-identical on the interpreter, the JIT, and under GC stress.
+- **Step 10 — type annotations + maps ✅.** `examples/realcc.bk` now accepts **HolyC-style typed
+  declarations** — `I64 x = e;`, `I64 x;` (defaults to 0), `U0[] a = e;`, and typed functions
+  `U0 f(I64 n) { ... }` with typed parameters — parsed and then discarded (gradual, exactly as brokm
+  treats its own scalar keywords). The untyped forms still work, so the grammar is a superset, moving
+  the toy syntax materially closer to real brokm. **Maps come for free**: `MapNew`/`MapSet`/`MapGet`
+  are native globals, so string-keyed maps work through the call path with no new code.
+  `tests/cases/selfhost8.bk` mixes typed and untyped declarations, a typed recursive `fib`, and a
+  string-keyed map — **no C changes**, byte-identical four ways.
 - **Path:** lexer ✅ → parser/AST ✅ → code generator ✅ → real bytecode ✅ → control flow ✅ →
-  functions ✅ → locals ✅ → arrays ✅ → strings ✅. The in-brokm compiler is a real, if small,
-  language back-end with values, control flow, functions, aggregates, and the native stdlib in reach.
-  Next, grow the source language toward brokm's own (type annotations, structs/maps) and feed it
-  brokm source, then — much later — a runtime in brokm, retiring the C bootstrap. The baseline JIT
-  matters here: a self-hosted compiler is compute-heavy.
+  functions ✅ → locals ✅ → arrays ✅ → strings ✅ → types + maps ✅. The in-brokm compiler is a
+  real, if small, language back-end whose surface syntax now overlaps brokm's. Next, close the
+  remaining grammar gap (structs/classes need a way to assemble an `ObjClass` — the one place a C
+  hook is still missing) and start feeding it real brokm source, then — much later — a runtime in
+  brokm, retiring the C bootstrap. The baseline JIT matters here: a self-hosted compiler is
+  compute-heavy.
 
 ## Language features tracked across milestones
 

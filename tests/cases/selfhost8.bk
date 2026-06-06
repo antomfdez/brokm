@@ -1,0 +1,37 @@
+// selfhost8.bk — self-hosting step 10: HolyC-style TYPE ANNOTATIONS in the
+// in-brokm real-bytecode compiler, plus MAPS (which come for free via the
+// native MapNew/MapSet/MapGet through the call path). The toy language now
+// accepts brokm-style typed declarations — `I64 x = e;`, `I64 x;` (defaults to
+// 0), `U0[] a = e;`, and typed functions `U0 f(I64 n) { ... }` with typed
+// parameters — parsed and then discarded (gradual). The untyped forms still
+// work, so this is a superset. #includes the compiler across directories.
+//
+// Expected output:
+//   100         (I64 x=10; y=x*x)
+//   144         (typed recursive fib(12))
+//   7           (untyped func still works)
+//   counts: a=30 b=25 has-carol=0 len=2   (string-keyed map)
+#include "../../examples/realcc.bk"
+
+U0 prog = Compile("
+  I64 x = 10;
+  I64 y;
+  y = x * x;
+  print y;
+
+  U0 fib(I64 n) { if (n < 2) { return n; } return fib(n - 1) + fib(n - 2); }
+  I64 r = fib(12);
+  print r;
+
+  func add(a, b) { return a + b; }
+  print add(3, 4);
+
+  U0[] counts = MapNew();
+  MapSet(counts, \"a\", 30);
+  MapSet(counts, \"b\", 25);
+  Print(\"counts: a=\"); print MapGet(counts, \"a\");
+  Print(\"counts: b=\"); print MapGet(counts, \"b\");
+  Print(\"has-carol=\"); print MapHas(counts, \"carol\");
+  Print(\"len=\"); print MapLen(counts);
+");
+prog();
