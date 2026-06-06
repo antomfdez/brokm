@@ -520,6 +520,25 @@ static Value native_assemble(int argc, Value *args) {
   return OBJ_VAL(fn);
 }
 
+/* MakeClass(name, fields) -> a class value (ObjClass) with the given name and
+ * declared field names, so brokm can define structs. Construction then goes
+ * through the ordinary OP_CALL path (call_value builds an instance with
+ * positional fields), and OP_GET_FIELD/OP_SET_FIELD access them. GC is held off
+ * across class_new: it allocates the field-name array after the class object,
+ * which is not yet rooted, so a collection there could free it. */
+static Value native_make_class(int argc, Value *args) {
+  if (argc < 2 || !IS_STRING(args[0]) || !IS_ARRAY(args[1])) return NIL_VAL;
+  ValueArray *fields = &AS_ARRAY(args[1])->elements;
+  bool savedGc = vm.gcEnabled;
+  vm.gcEnabled = false;
+  ObjClass *klass = class_new(AS_STRING(args[0]), fields->count);
+  for (int i = 0; i < fields->count; i++) {
+    if (IS_STRING(fields->values[i])) klass->fields[i] = AS_STRING(fields->values[i]);
+  }
+  vm.gcEnabled = savedGc;
+  return OBJ_VAL(klass);
+}
+
 void natives_register(void) {
   vm_define_native("Print", native_print);
   vm_define_native("PrintErr", native_print_err);
@@ -564,4 +583,5 @@ void natives_register(void) {
   vm_define_native("Ceil", native_ceil);
   vm_define_native("Opcode", native_opcode);
   vm_define_native("Assemble", native_assemble);
+  vm_define_native("MakeClass", native_make_class);
 }

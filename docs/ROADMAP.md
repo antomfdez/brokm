@@ -386,13 +386,24 @@ Can brokm compile itself? Eventually, yes — and brokm now hosts the front-end 
   are native globals, so string-keyed maps work through the call path with no new code.
   `tests/cases/selfhost8.bk` mixes typed and untyped declarations, a typed recursive `fib`, and a
   string-keyed map — **no C changes**, byte-identical four ways.
+- **Step 11 — structs/classes ✅.** `examples/realcc.bk` gained `class Name { I64 x; I64 y; }`
+  declarations, construction `Name(a, b)` (through the ordinary `OP_CALL` path — `call_value` builds
+  the instance), and field access `obj.field` / `obj.field = v` (real `OP_GET_FIELD` /
+  `OP_SET_FIELD`). This is the one place a C hook was still needed: classes are compile-time constants
+  in the C VM, so a small **`MakeClass(name, fields)` native** assembles the `ObjClass` (holding GC
+  off across `class_new`, whose internal field-array allocation would otherwise free the unrooted
+  class). A `NULL` literal was added so self-referential structures work. `tests/cases/selfhost9.bk`
+  declares `Point`/`Rect`/`Cons`, mutates fields, passes structs to functions, and sums a
+  self-referential linked list by both recursion and iteration — byte-identical four ways (with
+  `MakeClass` exercised under GC stress).
 - **Path:** lexer ✅ → parser/AST ✅ → code generator ✅ → real bytecode ✅ → control flow ✅ →
-  functions ✅ → locals ✅ → arrays ✅ → strings ✅ → types + maps ✅. The in-brokm compiler is a
-  real, if small, language back-end whose surface syntax now overlaps brokm's. Next, close the
-  remaining grammar gap (structs/classes need a way to assemble an `ObjClass` — the one place a C
-  hook is still missing) and start feeding it real brokm source, then — much later — a runtime in
-  brokm, retiring the C bootstrap. The baseline JIT matters here: a self-hosted compiler is
-  compute-heavy.
+  functions ✅ → locals ✅ → arrays ✅ → strings ✅ → types + maps ✅ → structs ✅. The in-brokm
+  compiler is now a real, small language back-end covering values, control flow, functions,
+  aggregates, strings, maps, and user-defined types — its surface syntax substantially overlaps
+  brokm's. Remaining gaps before it could compile brokm itself: methods on classes (`OP_INVOKE`),
+  `for`/`switch`, and matching brokm's exact grammar (e.g. `"...";` print statements). Then — much
+  later — a runtime in brokm, retiring the C bootstrap. The baseline JIT matters here: a self-hosted
+  compiler is compute-heavy.
 
 ## Language features tracked across milestones
 

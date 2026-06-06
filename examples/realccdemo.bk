@@ -95,3 +95,17 @@ U0 typedProg = Compile("
   Print(\"ada is \"); print MapGet(ages, \"ada\");
 ");
 typedProg();                                            // gcd(48,36) = 12 / ada is 36
+
+// Structs/classes (step 11): a declaration, construction, field access, and a
+// self-referential linked list summed by recursion.
+U0 structProg = Compile("
+  Print(\"-- structs --\n\");
+  class Vec2 { I64 x; I64 y; }
+  func dot(a, b) { return a.x * b.x + a.y * b.y; }
+  Print(\"dot = \"); print dot(Vec2(1, 2), Vec2(3, 4));
+
+  class Cons { I64 head; U0 tail; }
+  func sum(xs) { if (xs == NULL) { return 0; } return xs.head + sum(xs.tail); }
+  Print(\"sum = \"); print sum(Cons(5, Cons(7, Cons(9, NULL))));
+");
+structProg();                                           // dot = 11 / sum = 21

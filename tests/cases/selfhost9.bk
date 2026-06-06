@@ -1,0 +1,40 @@
+// selfhost9.bk — self-hosting step 11: STRUCTS/CLASSES in the in-brokm
+// real-bytecode compiler. The toy language gained `class Name { Type field; }`
+// declarations, construction `Name(a, b)` (through the ordinary OP_CALL path),
+// and field access `obj.field` / `obj.field = v` (real OP_GET_FIELD /
+// OP_SET_FIELD). Classes are built with the new `MakeClass` native — the one
+// place a C hook was still needed, since classes are compile-time constants in
+// the C VM. A `NULL` literal was added so self-referential structures work.
+// #includes the compiler across directories.
+//
+// Expected output:
+//   3 4 14        (Point: fields, then x:=10 so x+y = 14)
+//   42            (area of a Rect via a function taking a struct)
+//   60 3          (sum and length of a linked Cons list — recursion + iteration)
+//   1 2 3         (walking the list and printing each head)
+#include "../../examples/realcc.bk"
+
+U0 prog = Compile("
+  class Point { I64 x; I64 y; }
+  p = Point(3, 4);
+  print p.x;
+  print p.y;
+  p.x = 10;
+  print p.x + p.y;
+
+  class Rect { I64 w; I64 h; }
+  func area(r) { return r.w * r.h; }
+  print area(Rect(6, 7));
+
+  class Cons { I64 head; U0 tail; }
+  func sum(xs) { if (xs == NULL) { return 0; } return xs.head + sum(xs.tail); }
+  func len(xs) { n = 0; while (xs != NULL) { n = n + 1; xs = xs.tail; } return n; }
+  list = Cons(10, Cons(20, Cons(30, NULL)));
+  print sum(list);
+  print len(list);
+
+  nums = Cons(1, Cons(2, Cons(3, NULL)));
+  cur = nums;
+  while (cur != NULL) { print cur.head; cur = cur.tail; }
+");
+prog();
