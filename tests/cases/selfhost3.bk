@@ -1,0 +1,30 @@
+// selfhost3.bk — self-hosting step 5: a brokm program compiles a language with
+// CONTROL FLOW (if/else, while, comparisons) to the C VM's real bytecode and
+// runs it directly. #includes the compiler across directories (v0.10 modules).
+// The toy program exercises while loops, nested if/else, and every comparison
+// operator, so its printed output is a deterministic end-to-end check of the
+// generated jumps and backpatched offsets.
+//
+// Expected output: 120 (5!), 55 (fib), 0 2 4 99 (parity/threshold), then 1 7 8.
+#include "../../examples/realcc.bk"
+
+U0 prog = Compile("
+  n = 5; f = 1; i = 1;
+  while (i <= n) { f = f * i; i = i + 1; }
+  print f;
+
+  a = 0; b = 1; k = 0;
+  while (k < 10) { t = a + b; a = b; b = t; k = k + 1; }
+  print a;
+
+  j = 0;
+  while (j < 6) {
+    if (j % 2 == 0) { print j; } else { if (j >= 5) { print 99; } }
+    j = j + 1;
+  }
+
+  if (a != b) { print 1; } else { print 0; }
+  if (a == 55) { print 7; }
+  if (b > a) { print 8; }
+");
+prog();

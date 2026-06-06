@@ -1,0 +1,336 @@
+// realcc.bk — a small imperative language compiled to brokm's REAL bytecode,
+// now with CONTROL FLOW (self-hosting step 5). Builds on the step-4 bridge
+// (the `Opcode` and `Assemble` natives) and adds comparisons, `if/else`, and
+// `while` — emitting real OP_JUMP_IF_FALSE / OP_JUMP / OP_LOOP with 16-bit
+// big-endian operands and in-language jump backpatching.
+//
+// It is fully self-contained: lexer, parser, and code generator, depending only
+// on the two bridge natives. Variables are real VM globals. No C changes.
+//
+// Grammar:
+//   stmt   = "print" expr ";"
+//          | "if" "(" expr ")" block ["else" block]
+//          | "while" "(" expr ")" block
+//          | ident "=" expr ";"
+//   block  = "{" stmt* "}"
+//   expr   = add (("<"|">"|"<="|">="|"=="|"!=") add)*
+//   add    = term (("+"|"-") term)*
+//   term   = factor (("*"|"/"|"%") factor)*
+//   factor = number | ident | "(" expr ")" | "-" factor
+//
+// This is a LIBRARY (no top-level driver); see examples/realccdemo.bk.
+
+// ---- AST / token types -----------------------------------------------------
+// Tok.kind: 256 number, 257 ident, 258 print, 259 if, 260 else, 261 while,
+//   0 EOF, two-char ops 280 `==` 281 `!=` 282 `<=` 283 `>=`, else op char code.
+class Tok  { I64 kind; I64 val; U8 name; }
+// Node.op: 256 number, 257 variable, 110 negate, else binary op code (the same
+//   codes the tokenizer uses for `+ - * / % < >` and 280..283).
+class Node { I64 op; I64 val; U8 name; Node left; Node right; }
+// Stmt.kind: 0 assign, 1 print, 2 if, 3 while. thenB/elseB hold Stmt lists.
+class Stmt { I64 kind; U8 name; Node expr; U0[] thenB; U0[] elseB; }
+
+// ---- character classes -----------------------------------------------------
+I64 IsSpace(I64 c) { return c == 32 || c == 9 || c == 10 || c == 13; }
+I64 IsDigit(I64 c) { return c >= 48 && c <= 57; }
+I64 IsAlpha(I64 c) {
+  return (c >= 97 && c <= 122) || (c >= 65 && c <= 90) || c == 95;
+}
+I64 IsAlnum(I64 c) { return IsAlpha(c) || IsDigit(c); }
+
+// ---- tokenizer -------------------------------------------------------------
+U0[] Tokenize(U8 src)
+{
+  U0[] out = [];
+  I64 n = Len(src);
+  I64 i = 0;
+  while (i < n) {
+    I64 c = CharAt(src, i);
+    if (IsSpace(c)) {
+      i = i + 1;
+    } else if (IsDigit(c)) {
+      I64 start = i;
+      while (i < n && IsDigit(CharAt(src, i))) i = i + 1;
+      Append(out, Tok(256, ToInt(Substr(src, start, i - start)), NULL));
+    } else if (IsAlpha(c)) {
+      I64 start = i;
+      while (i < n && IsAlnum(CharAt(src, i))) i = i + 1;
+      U8 word = Substr(src, start, i - start);
+      if (word == "print")      Append(out, Tok(258, 0, NULL));
+      else if (word == "if")    Append(out, Tok(259, 0, NULL));
+      else if (word == "else")  Append(out, Tok(260, 0, NULL));
+      else if (word == "while") Append(out, Tok(261, 0, NULL));
+      else                      Append(out, Tok(257, 0, word));
+    } else {
+      // Two-character operators: ==, !=, <=, >=.
+      I64 nx = 0;
+      if (i + 1 < n) nx = CharAt(src, i + 1);
+      if (c == 61 && nx == 61)      { Append(out, Tok(280, 0, NULL)); i = i + 2; }
+      else if (c == 33 && nx == 61) { Append(out, Tok(281, 0, NULL)); i = i + 2; }
+      else if (c == 60 && nx == 61) { Append(out, Tok(282, 0, NULL)); i = i + 2; }
+      else if (c == 62 && nx == 61) { Append(out, Tok(283, 0, NULL)); i = i + 2; }
+      else { Append(out, Tok(c, 0, NULL)); i = i + 1; }  // single-char token
+    }
+  }
+  Append(out, Tok(0, 0, NULL));   // EOF sentinel
+  return out;
+}
+
+// ---- parser ----------------------------------------------------------------
+U0[] toks = [];
+I64 pos = 0;
+
+I64 PeekKind() { return toks[pos].kind; }
+U0  Advance()  { pos = pos + 1; }
+
+Node MakeNum(I64 v)                  { return Node(256, v, NULL, NULL, NULL); }
+Node MakeVar(U8 name)                { return Node(257, 0, name, NULL, NULL); }
+Node MakeNeg(Node c)                 { return Node(110, 0, NULL, c, NULL); }
+Node MakeBin(I64 op, Node l, Node r) { return Node(op, 0, NULL, l, r); }
+
+I64 IsCompare(I64 k) {
+  return k == 60 || k == 62 || k == 280 || k == 281 || k == 282 || k == 283;
+}
+
+Node ParseExpr();   // forward declaration
+
+Node ParseFactor()
+{
+  Tok t = toks[pos];
+  if (t.kind == 256) { Advance(); return MakeNum(t.val); }
+  if (t.kind == 257) { Advance(); return MakeVar(t.name); }
+  if (t.kind == 40)  { Advance(); Node e = ParseExpr(); Advance(); return e; } // ( )
+  if (t.kind == 45)  { Advance(); return MakeNeg(ParseFactor()); }             // unary -
+  return MakeNum(0);
+}
+
+Node ParseTerm()
+{
+  Node left = ParseFactor();
+  while (PeekKind() == 42 || PeekKind() == 47 || PeekKind() == 37) {  // * / %
+    I64 op = PeekKind();
+    Advance();
+    left = MakeBin(op, left, ParseFactor());
+  }
+  return left;
+}
+
+Node ParseAdd()
+{
+  Node left = ParseTerm();
+  while (PeekKind() == 43 || PeekKind() == 45) {  // + -
+    I64 op = PeekKind();
+    Advance();
+    left = MakeBin(op, left, ParseTerm());
+  }
+  return left;
+}
+
+Node ParseExpr()
+{
+  Node left = ParseAdd();
+  while (IsCompare(PeekKind())) {  // comparisons (lowest precedence)
+    I64 op = PeekKind();
+    Advance();
+    left = MakeBin(op, left, ParseAdd());
+  }
+  return left;
+}
+
+Stmt ParseStmt();   // forward declaration
+
+U0[] ParseBlock()
+{
+  Advance();                       // consume '{'
+  U0[] body = [];
+  while (PeekKind() != 125 && PeekKind() != 0) Append(body, ParseStmt());
+  Advance();                       // consume '}'
+  return body;
+}
+
+Stmt ParseStmt()
+{
+  if (PeekKind() == 259) {                 // if ( cond ) block [else block]
+    Advance();
+    Advance();                             // '('
+    Node cond = ParseExpr();
+    Advance();                             // ')'
+    U0[] thenB = ParseBlock();
+    U0[] elseB = NULL;
+    if (PeekKind() == 260) { Advance(); elseB = ParseBlock(); }
+    return Stmt(2, NULL, cond, thenB, elseB);
+  }
+  if (PeekKind() == 261) {                 // while ( cond ) block
+    Advance();
+    Advance();                             // '('
+    Node cond = ParseExpr();
+    Advance();                             // ')'
+    U0[] body = ParseBlock();
+    return Stmt(3, NULL, cond, body, NULL);
+  }
+  if (PeekKind() == 258) {                 // print expr ;
+    Advance();
+    Node e = ParseExpr();
+    Advance();                             // ';'
+    return Stmt(1, NULL, e, NULL, NULL);
+  }
+  U8 name = toks[pos].name;                // name = expr ;
+  Advance();                               // ident
+  Advance();                               // '='
+  Node e = ParseExpr();
+  Advance();                               // ';'
+  return Stmt(0, name, e, NULL, NULL);
+}
+
+U0[] Parse(U8 src)
+{
+  toks = Tokenize(src);
+  pos = 0;
+  U0[] stmts = [];
+  while (PeekKind() != 0) Append(stmts, ParseStmt());
+  return stmts;
+}
+
+// ---- real opcode numbers (chunk.h enum is the source of truth) -------------
+I64 ROP_CONSTANT      = Opcode("CONSTANT");
+I64 ROP_DEFINE_GLOBAL = Opcode("DEFINE_GLOBAL");
+I64 ROP_GET_GLOBAL    = Opcode("GET_GLOBAL");
+I64 ROP_ADD           = Opcode("ADD");
+I64 ROP_SUB           = Opcode("SUB");
+I64 ROP_MUL           = Opcode("MUL");
+I64 ROP_DIV           = Opcode("DIV");
+I64 ROP_MOD           = Opcode("MOD");
+I64 ROP_NEGATE        = Opcode("NEGATE");
+I64 ROP_LESS          = Opcode("LESS");
+I64 ROP_GREATER       = Opcode("GREATER");
+I64 ROP_LESS_EQUAL    = Opcode("LESS_EQUAL");
+I64 ROP_GREATER_EQUAL = Opcode("GREATER_EQUAL");
+I64 ROP_EQUAL         = Opcode("EQUAL");
+I64 ROP_NOT_EQUAL     = Opcode("NOT_EQUAL");
+I64 ROP_PRINT         = Opcode("PRINT");
+I64 ROP_POP           = Opcode("POP");
+I64 ROP_JUMP          = Opcode("JUMP");
+I64 ROP_JUMP_IF_FALSE = Opcode("JUMP_IF_FALSE");
+I64 ROP_LOOP          = Opcode("LOOP");
+I64 ROP_NIL           = Opcode("NIL");
+I64 ROP_RETURN        = Opcode("RETURN");
+
+// ---- emit buffers + helpers ------------------------------------------------
+U0[] rcode   = [];
+U0[] rconsts = [];
+
+I64 AddConst(U0 v)           { I64 i = Len(rconsts); Append(rconsts, v); return i; }
+U0  Emit(I64 op)             { Append(rcode, op); }
+U0  EmitArg(I64 op, I64 arg) { Append(rcode, op); Append(rcode, arg); }
+
+// Emit a jump with a placeholder 16-bit operand; return the operand's index so
+// it can be patched once the target is known (mirrors the C compiler).
+I64 EmitJump(I64 op)
+{
+  Append(rcode, op);
+  Append(rcode, 255);
+  Append(rcode, 255);
+  return Len(rcode) - 2;
+}
+
+// Backpatch the forward jump whose operand starts at `at` to land here.
+U0 PatchJump(I64 at)
+{
+  I64 jump = Len(rcode) - at - 2;
+  rcode[at]     = (jump >> 8) & 255;
+  rcode[at + 1] = jump & 255;
+}
+
+// Emit a backward LOOP to `loopStart` (big-endian, as the C compiler emits it).
+U0 EmitLoop(I64 loopStart)
+{
+  Append(rcode, ROP_LOOP);
+  I64 offset = Len(rcode) - loopStart + 2;
+  Append(rcode, (offset >> 8) & 255);
+  Append(rcode, offset & 255);
+}
+
+I64 BinOpcode(I64 c)
+{
+  if (c == 43)  return ROP_ADD;
+  if (c == 45)  return ROP_SUB;
+  if (c == 42)  return ROP_MUL;
+  if (c == 47)  return ROP_DIV;
+  if (c == 37)  return ROP_MOD;
+  if (c == 60)  return ROP_LESS;
+  if (c == 62)  return ROP_GREATER;
+  if (c == 282) return ROP_LESS_EQUAL;
+  if (c == 283) return ROP_GREATER_EQUAL;
+  if (c == 280) return ROP_EQUAL;
+  return ROP_NOT_EQUAL;            // 281 `!=`
+}
+
+// ---- code generation -------------------------------------------------------
+U0 GenExpr(Node n)
+{
+  if (n.op == 256) { EmitArg(ROP_CONSTANT, AddConst(n.val)); return; }
+  if (n.op == 257) { EmitArg(ROP_GET_GLOBAL, AddConst(n.name)); return; }
+  if (n.op == 110) { GenExpr(n.left); Emit(ROP_NEGATE); return; }
+  GenExpr(n.left);
+  GenExpr(n.right);
+  Emit(BinOpcode(n.op));
+}
+
+U0 GenStmts(U0[] stmts);   // forward declaration (mutual recursion w/ GenStmt)
+
+U0 GenStmt(Stmt s)
+{
+  if (s.kind == 0) {                          // name = expr
+    GenExpr(s.expr);
+    EmitArg(ROP_DEFINE_GLOBAL, AddConst(s.name));
+    return;
+  }
+  if (s.kind == 1) {                          // print expr
+    EmitArg(ROP_CONSTANT, AddConst("%d\n"));
+    GenExpr(s.expr);
+    EmitArg(ROP_PRINT, 2);
+    return;
+  }
+  if (s.kind == 2) {                          // if (cond) then [else]
+    GenExpr(s.expr);
+    I64 thenJump = EmitJump(ROP_JUMP_IF_FALSE);
+    Emit(ROP_POP);                            // condition true: discard it
+    GenStmts(s.thenB);
+    I64 elseJump = EmitJump(ROP_JUMP);
+    PatchJump(thenJump);
+    Emit(ROP_POP);                            // condition false: discard it
+    if (s.elseB != NULL) GenStmts(s.elseB);
+    PatchJump(elseJump);
+    return;
+  }
+  // s.kind == 3: while (cond) body
+  I64 loopStart = Len(rcode);
+  GenExpr(s.expr);
+  I64 exitJump = EmitJump(ROP_JUMP_IF_FALSE);
+  Emit(ROP_POP);                              // entering loop: discard cond
+  GenStmts(s.thenB);
+  EmitLoop(loopStart);
+  PatchJump(exitJump);
+  Emit(ROP_POP);                              // loop exited: discard cond
+}
+
+U0 GenStmts(U0[] stmts)
+{
+  I64 i = 0;
+  while (i < Len(stmts)) {
+    GenStmt(stmts[i]);
+    i = i + 1;
+  }
+}
+
+// Compile source text into a callable function that runs on the C VM.
+U0 Compile(U8 src)
+{
+  U0[] stmts = Parse(src);
+  rcode   = [];
+  rconsts = [];
+  GenStmts(stmts);
+  Emit(ROP_NIL);
+  Emit(ROP_RETURN);
+  return Assemble(rcode, rconsts);
+}

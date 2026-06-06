@@ -336,10 +336,19 @@ Can brokm compile itself? Eventually, yes — and brokm now hosts the front-end 
   (`OP_DEFINE_GLOBAL`/`OP_GET_GLOBAL`), so no slot bookkeeping is needed. `examples/realgen.bk` is
   the demo; `tests/cases/selfhost2.bk` (`#include`s the library across directories) is the golden
   test, byte-identical on the interpreter, the JIT, and under GC stress.
-- **Path:** lexer ✅ → parser/AST ✅ → code generator ✅ → real bytecode ✅ → next, broaden the
-  emitted ISA (control flow — jumps/loops — and function definitions) so a full brokm front-end can
-  target it, then — much later — a runtime in brokm, retiring the C bootstrap. The baseline JIT
-  matters here: a self-hosted compiler is compute-heavy.
+- **Step 5 — control flow ✅.** `examples/realcc.bk` is a self-contained compiler (lexer + parser +
+  code generator, depending only on the `Opcode`/`Assemble` natives) for a small imperative language
+  with comparisons, `if/else`, and `while`. It emits real `OP_JUMP_IF_FALSE` / `OP_JUMP` / `OP_LOOP`
+  with 16-bit big-endian operands and does **in-language jump backpatching** (`EmitJump` reserves a
+  placeholder operand, `PatchJump` fills it once the target is known, `EmitLoop` computes the
+  backward offset) — mirroring the C compiler's `emit_jump`/`patch_jump`/`emit_loop` exactly, again
+  with **no C changes**. `examples/realccdemo.bk` is the demo; `tests/cases/selfhost3.bk` exercises
+  nested `if/else`, `while`, and every comparison operator as a deterministic check of the generated
+  jumps, byte-identical on the interpreter, the JIT, and under GC stress.
+- **Path:** lexer ✅ → parser/AST ✅ → code generator ✅ → real bytecode ✅ → control flow ✅ → next,
+  function definitions (assemble nested `ObjFunction` constants with arity, emit `OP_CALL`) so a full
+  brokm front-end can target the C VM, then — much later — a runtime in brokm, retiring the C
+  bootstrap. The baseline JIT matters here: a self-hosted compiler is compute-heavy.
 
 ## Language features tracked across milestones
 

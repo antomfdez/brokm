@@ -1,0 +1,26 @@
+// realccdemo.bk — compile a small imperative language (with if/else and while)
+// to brokm's REAL bytecode and run it on the C VM (self-hosting step 5 demo).
+// Each Compile(...) returns an ordinary callable whose body is brokm-generated
+// real bytecode, jumps and all.
+
+#include "realcc.bk"
+
+"-- if/else + while compiled to real brokm bytecode, run on the C VM --\n";
+
+// Sum 1..100 with a while loop.
+U0 sumProg = Compile("sum = 0; i = 1; while (i <= 100) { sum = sum + i; i = i + 1; } print sum;");
+sumProg();                                              // 5050
+
+// 6! with a while loop.
+U0 factProg = Compile("f = 1; k = 1; while (k <= 6) { f = f * k; k = k + 1; } print f;");
+factProg();                                             // 720
+
+// Classify the numbers 1..7 by parity using if/else.
+U0 parityProg = Compile("
+  n = 1;
+  while (n <= 7) {
+    if (n % 2 == 0) { print n; } else { print -n; }
+    n = n + 1;
+  }
+");
+parityProg();                                           // -1 2 -3 4 -5 6 -7
