@@ -167,6 +167,27 @@ static bool class_has_method(TcClass *cls, ObjString *name) {
   return false;
 }
 
+/* Host natives registered through the embedding API (brokm_register). Persists
+ * across typecheck() runs, unlike the per-run tc registries. */
+static char **hostNatives = NULL;
+static int hostNativeCount = 0;
+static int hostNativeCap = 0;
+
+void typecheck_register_native(const char *name) {
+  for (int i = 0; i < hostNativeCount; i++) {
+    if (strcmp(hostNatives[i], name) == 0) return; /* already known */
+  }
+  if (hostNativeCap < hostNativeCount + 1) {
+    int old = hostNativeCap;
+    hostNativeCap = GROW_CAPACITY(old);
+    hostNatives = GROW_ARRAY(char *, hostNatives, old, hostNativeCap);
+  }
+  size_t len = strlen(name);
+  char *copy = ALLOCATE(char, len + 1);
+  memcpy(copy, name, len + 1);
+  hostNatives[hostNativeCount++] = copy;
+}
+
 static void register_natives(void) {
   /* Names from natives_register() in natives.c. All variadic, TY_UNKNOWN
    * result, so calls to them are never flagged. */
@@ -185,6 +206,11 @@ static void register_natives(void) {
   size_t n = sizeof(NAMES) / sizeof(NAMES[0]);
   for (size_t i = 0; i < n; i++) {
     ObjString *name = string_copy(NAMES[i], (int)strlen(NAMES[i]));
+    register_func(name, ty(TY_UNKNOWN), NULL, 0, true);
+  }
+  /* Host natives from the embedding API, same gradual treatment. */
+  for (int i = 0; i < hostNativeCount; i++) {
+    ObjString *name = string_copy(hostNatives[i], (int)strlen(hostNatives[i]));
     register_func(name, ty(TY_UNKNOWN), NULL, 0, true);
   }
 }

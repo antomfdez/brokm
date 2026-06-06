@@ -13,4 +13,9 @@
  * any type error was found. */
 bool typecheck(StmtList *program);
 
+/* Register a host-provided native name (from the embedding API) so scripts may
+ * call it without an "unknown identifier" error. Persists across typecheck()
+ * runs; treated as a variadic, TY_UNKNOWN builtin like the standard natives. */
+void typecheck_register_native(const char *name);
+
 #endif /* BROKM_TYPECHECK_H */

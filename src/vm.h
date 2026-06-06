@@ -33,6 +33,12 @@ typedef struct {
   int rememberedCount;
   int rememberedCapacity;
   Obj **rememberedSet; /* old objects pointing into the young generation */
+
+  /* C-API temporary roots: host-created values (e.g. strings from the embedding
+   * API) kept alive between construction and use. Cleared at each public API
+   * call boundary. */
+  Value apiRoots[BK_API_ROOTS_MAX];
+  int apiRootCount;
 } VM;
 
 typedef enum {
@@ -52,5 +58,12 @@ InterpretResult vm_interpret(const char *source);
 void vm_push(Value value);
 Value vm_pop(void);
 void vm_define_native(const char *name, NativeFn fn);
+
+/* Embedding support (api.c). vm_invoke expects [callee, args...] on the value
+ * stack and leaves the result on top. The API temp-root stack keeps host-created
+ * values alive across allocations until the next public call boundary. */
+InterpretResult vm_invoke(int argCount);
+void vm_api_root(Value value);
+void vm_api_clear_roots(void);
 
 #endif /* BROKM_VM_H */

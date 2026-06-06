@@ -9,7 +9,10 @@ SRC := $(wildcard src/*.c)
 OBJ := $(SRC:.c=.o)
 BIN := brokm
 
-.PHONY: all debug test bench clean
+.PHONY: all debug test bench embed test-embed clean
+
+# Embedding demo: the library sources (minus the CLI main) + the host program.
+EMBED_SRC := $(filter-out src/main.c,$(SRC))
 
 all: $(BIN)
 
@@ -34,6 +37,19 @@ test-gc: clean
 	@bash tests/run_tests.sh
 	@$(MAKE) --no-print-directory clean
 
+# Build the C embedding example (examples/embed.c) into ./embed-demo.
+embed: examples/embed.c $(EMBED_SRC)
+	$(CC) $(CFLAGS) -o embed-demo examples/embed.c $(EMBED_SRC) $(LDFLAGS)
+
+# Run the embedding example and compare to its golden output.
+test-embed: embed
+	@./embed-demo > /tmp/brokm-embed.out 2>&1; \
+	if diff examples/embed.expected /tmp/brokm-embed.out >/dev/null; then \
+	  echo "embed: OK"; \
+	else \
+	  echo "embed: FAIL"; diff examples/embed.expected /tmp/brokm-embed.out; exit 1; \
+	fi
+
 # Benchmark the JIT against the interpreter on a recursion-heavy program.
 bench:
 	$(CC) $(CFLAGS) -o /tmp/brokm-jit $(SRC) $(LDFLAGS)
@@ -42,4 +58,4 @@ bench:
 	@echo "JIT:";         time /tmp/brokm-jit   bench/fib.bk
 
 clean:
-	rm -f $(OBJ) $(BIN)
+	rm -f $(OBJ) $(BIN) embed-demo

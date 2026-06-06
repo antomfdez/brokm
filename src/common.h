@@ -21,6 +21,7 @@ typedef double   F64;
 #define BK_FRAMES_MAX 64
 #define BK_SLOT_COUNT 256
 #define BK_STACK_MAX  (BK_FRAMES_MAX * BK_SLOT_COUNT)
+#define BK_API_ROOTS_MAX 256 /* C-API temporary roots (embedding value exchange) */
 
 /* Optional verbose diagnostics (off by default). */
 /* #define BK_DEBUG_PRINT_CODE */

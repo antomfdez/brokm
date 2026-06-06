@@ -148,6 +148,7 @@ static void mark_roots(void) {
     mark_object((Obj *)vm.frames[i].function);
   }
   mark_table(&vm.globals);
+  for (int i = 0; i < vm.apiRootCount; i++) mark_value(vm.apiRoots[i]);
 
   /* For a minor collection, old objects are not scanned, so old objects known
    * to hold young references must be scanned for their young children. */

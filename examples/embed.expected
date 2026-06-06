@@ -1,0 +1,7 @@
+brokm 0.9.0 embedding demo
+Triple(7) = 21
+Greet() = hello from C
+Hi(brokm) = hi brokm
+counter = 10
+after Bump = 15
+after set = 100

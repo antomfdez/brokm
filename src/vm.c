@@ -63,6 +63,7 @@ void vm_init(void) {
   vm.rememberedCount = 0;
   vm.rememberedCapacity = 0;
   vm.rememberedSet = NULL;
+  vm.apiRootCount = 0;
 
   table_init(&vm.globals);
   table_init(&vm.strings);
@@ -621,7 +622,10 @@ static InterpretResult run_until(int baseFrameCount) {
       case OP_RETURN: {
         Value result = vm_pop();
         vm.frameCount--;
-        if (vm.frameCount == 0) {
+        /* The top-level <script> (the only nameless function) is discarded
+         * whole; any other frame leaves its result for the caller — including an
+         * embedded brokm_call whose callee is itself the outermost frame. */
+        if (vm.frameCount == 0 && frame->function->name == NULL) {
           vm_pop(); /* the <script> function */
           return BK_OK;
         }
@@ -733,4 +737,23 @@ InterpretResult vm_interpret(const char *source) {
 
   vm.gcEnabled = true; /* the script and its constants are now rooted */
   return run_until(0);
+}
+
+/* ---- embedding support (used by api.c) -------------------------------- */
+
+void vm_api_root(Value value) {
+  if (vm.apiRootCount < BK_API_ROOTS_MAX) vm.apiRoots[vm.apiRootCount++] = value;
+}
+
+void vm_api_clear_roots(void) { vm.apiRootCount = 0; }
+
+/* Call the value at peek(argCount) with the argCount values above it, then run
+ * any bytecode frame it pushes to completion. The result is left on the stack.
+ * Mirrors jit_h_call but is available in -DBK_NO_JIT builds. */
+InterpretResult vm_invoke(int argCount) {
+  vm.gcEnabled = true; /* globals/args on the stack are rooted */
+  int saved = vm.frameCount;
+  if (!call_value(peek(argCount), argCount)) return BK_RUNTIME_ERROR;
+  if (vm.frameCount > saved) return run_until(saved);
+  return BK_OK; /* native / class produced the result directly */
 }

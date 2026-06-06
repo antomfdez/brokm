@@ -193,9 +193,9 @@ with the type checker as gradual `TY_UNKNOWN` and need no VM/JIT changes (native
 code already route through `jit_h_call`). Verified byte-identical across the interpreter, forced
 JIT, and `-DBK_NO_JIT`, and under GC stress (`tests/cases/stdlib.bk`, `io.bk`).
 
-**Deferred to v0.6.x / v0.7:** a richer embedding API (register natives + exchange values from C),
-**multi-instance VMs** (replacing the global `VM vm` — a cross-cutting refactor), and a formal
-language spec.
+**Deferred to v0.6.x / v0.7:** a richer embedding API (register natives + exchange values from C)
+— **done in v0.9, below**; **multi-instance VMs** (replacing the global `VM vm` — a cross-cutting
+refactor), and a formal language spec.
 
 ## v0.7 — Maps ✅ (done)
 
@@ -243,6 +243,35 @@ Behavior that used to be written as free functions over instances can now live o
 
 **Deferred:** first-class/bound methods (storing `obj.m`), implicit-`this` sibling calls,
 inheritance, static/class methods, and a `self` alias for `this`.
+
+## v0.9 — Embedding API ✅ (done)
+
+"Easy to embed" is a core goal; the public C API (`include/brokm.h`) now lets a host program drive
+brokm with real values, not just `eval` strings.
+
+- **Value exchange.** An opaque, by-value `BrokmValue` (a 16-byte handle, layout-compatible with
+  the internal `Value`) with constructors (`brokm_int/float/bool/nil/string`) and
+  predicates/accessors. `api.c` bridges the two through a `union` and a size assertion; scalars
+  and strings cross the boundary (aggregates do not, yet).
+- **Host natives.** `brokm_register(name, fn)` exposes a C function
+  (`BrokmValue (*)(int, const BrokmValue *)`) to scripts. It registers through the existing
+  `vm_define_native` and adds the name to the type checker's (now runtime-extensible) native set
+  so scripts may call it.
+- **Globals + calls.** `brokm_get_global` / `brokm_set_global`, and `brokm_call(name, argc, args,
+  &result)` to invoke a brokm function from C (built on a new ungated `vm_invoke` that mirrors the
+  JIT's call helper).
+- **GC-safety.** Host-created strings are kept alive by a small C-API temp-root stack marked by
+  the collector and cleared at each public-call boundary; verified by running the example under
+  stress GC.
+- **Worked example.** `examples/embed.c` (`make embed`, `make test-embed`) registers natives,
+  evaluates source, calls brokm from C, exchanges scalars + strings, and reads/sets globals;
+  byte-identical with and without the JIT.
+- **Bug fixed along the way.** `OP_RETURN`'s top-level special case assumed the outermost frame is
+  always the `<script>`; an embedded `brokm_call`'s callee is also outermost, so the result was
+  discarded. Now gated on the nameless `<script>` function — the existing suite stays green.
+
+**Deferred:** multi-instance VMs (replacing the global `VM vm`), exchanging
+arrays/instances/maps across the boundary, and a formal spec.
 
 ## Self-hosting (north star)
 

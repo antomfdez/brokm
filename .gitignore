@@ -1,5 +1,6 @@
 # Build artifacts
 /brokm
+/embed-demo
 src/*.o
 *.o
 
