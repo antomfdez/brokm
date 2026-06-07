@@ -454,10 +454,10 @@ Stmt ParseStmt()
       Advance();                            // '='
       Node e = ParseExpr();
       Advance();                            // ';'
-      return Stmt(0, nm, e, NULL, NULL, NULL, NULL);
+      return Stmt(16, nm, e, NULL, NULL, NULL, NULL);  // typed decl: introduces a local
     }
     Advance();                              // ';'  — `Type name;` defaults to 0
-    return Stmt(0, nm, MakeNum(0), NULL, NULL, NULL, NULL);
+    return Stmt(16, nm, MakeNum(0), NULL, NULL, NULL, NULL);  // typed decl: introduces a local
   }
 
   // Assignment or expression statement. Parse an expression; if '=' follows it

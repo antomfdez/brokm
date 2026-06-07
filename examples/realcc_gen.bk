@@ -57,6 +57,11 @@ U0[] curLocals = NULL;
 // the switch's end; NULL outside any switch. Saved/restored around each switch
 // so nested switches each collect their own.
 U0[] swBreaks = NULL;
+// Names declared at the program's top level (global variables). A bare
+// assignment (kind 0) inside a function targets the global when its name is
+// here, mirroring brokm — only a typed declaration (kind 16) or a parameter
+// introduces a local. Populated per compilation in Compile.
+U0[] globalNames = [];
 
 I64 AddConst(U0 v)           { I64 i = Len(rconsts); Append(rconsts, v); return i; }
 U0  Emit(I64 op)             { Append(rcode, op); }
@@ -212,7 +217,7 @@ U0 GenSwitch(Stmt s);      // forward declaration
 
 U0 GenStmt(Stmt s)
 {
-  if (s.kind == 0) {                          // name = expr
+  if (s.kind == 0 || s.kind == 16) {          // name = expr  (bare assign or typed decl)
     GenExpr(s.expr);
     I64 slot = LocalSlot(s.name);
     if (slot >= 0) { EmitArg(ROP_SET_LOCAL, slot); Emit(ROP_POP); } // SET_LOCAL leaves value
@@ -407,8 +412,11 @@ U0 CollectLocals(U0[] stmts, U0[] locals)
   I64 i = 0;
   while (i < Len(stmts)) {
     Stmt s = stmts[i];
-    if (s.kind == 0) {                                  // assignment target
+    if (s.kind == 16) {                                 // typed decl: always a local
       if (!Contains(locals, s.name)) Append(locals, s.name);
+    } else if (s.kind == 0) {                           // bare assign: local only if
+      if (!Contains(globalNames, s.name) &&             // it is not a top-level global
+          !Contains(locals, s.name)) Append(locals, s.name);
     } else if (s.kind == 2) {                           // if: then + else
       CollectLocals(s.thenB, locals);
       if (s.elseB != NULL) CollectLocals(s.elseB, locals);
@@ -463,11 +471,42 @@ U0 GenFunction(Stmt fn)
   return fnval;
 }
 
+// Record every name assigned at the program's top level (a global) into
+// globalNames, so a same-named bare assignment inside a function targets that
+// global rather than shadowing it with a fresh local. Mirrors brokm's scoping.
+U0 CollectGlobals(U0[] stmts)
+{
+  I64 i = 0;
+  while (i < Len(stmts)) {
+    Stmt s = stmts[i];
+    if (s.kind == 0 || s.kind == 16) {
+      if (!Contains(globalNames, s.name)) Append(globalNames, s.name);
+    } else if (s.kind == 2) {
+      CollectGlobals(s.thenB);
+      if (s.elseB != NULL) CollectGlobals(s.elseB);
+    } else if (s.kind == 3) {
+      CollectGlobals(s.thenB);
+    } else if (s.kind == 10) {
+      CollectGlobals(s.elseB);
+      CollectGlobals(s.thenB);
+      CollectGlobals(s.params);
+    } else if (s.kind == 11) {
+      CollectGlobals(s.thenB);
+    } else if (s.kind == 12) {
+      I64 j = 0;
+      while (j < Len(s.thenB)) { CollectGlobals(s.thenB[j].thenB); j = j + 1; }
+    }
+    i = i + 1;
+  }
+}
+
 // Compile source text into a callable function (the top-level script) that runs
 // on the C VM.
 U0 Compile(U8 src)
 {
   U0[] stmts = Parse(src);
+  globalNames = [];
+  CollectGlobals(stmts);             // top-level names are globals
   rcode     = [];
   rconsts   = [];
   curLocals = NULL;

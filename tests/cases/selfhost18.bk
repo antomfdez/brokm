@@ -1,0 +1,28 @@
+// Self-hosting step 21 — local/global scoping that matches brokm. A bare
+// assignment to a top-level global updates that global instead of creating a
+// shadowing function-local, while a bare assignment to a name that is not a
+// global still introduces a function-local (so recursion keeps working). This
+// is exactly what lets a function such as `Parse` write the shared `toks`/`pos`
+// globals that other functions read — the pattern realcc's own source needs.
+#include "../../examples/realcc.bk"
+
+U0 prog = Compile("
+  counter = 0;
+  func Bump() { counter = counter + 1; }     // writes the global, not a local
+  func Read() { return counter; }
+  Bump(); Bump(); Bump();
+  \"counter = %d\n\", Read();
+
+  func Fac(n) {
+    if (n <= 1) { return 1; }
+    m = n;                  // bare assign, not a global -> a function-local
+    return Fac(n - 1) * m;  // m must survive the recursive call
+  }
+  \"5! = %d\n\", Fac(5);
+
+  I64 total = 0;
+  func AddTo(x) { total = total + x; }        // typed global updated in a func
+  AddTo(10); AddTo(20); AddTo(12);
+  \"total = %d\n\", total;
+");
+prog();

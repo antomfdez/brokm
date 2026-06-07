@@ -21,7 +21,8 @@ class Tok  { I64 kind; I64 val; U8 name; }
 //   is the object and `name` the field; for a method call, `left` is the
 //   receiver, `name` the method, and `args` the arguments.
 class Node { I64 op; I64 val; U8 name; Node left; Node right; U0[] args; }
-// Stmt.kind: 0 assign, 1 print, 2 if, 3 while, 4 return, 5 func, 6 index-set
+// Stmt.kind: 0 bare assign (`x = e` — targets an existing local or global,
+//   never introduces one), 1 print, 2 if, 3 while, 4 return, 5 func, 6 index-set
 //   (expr = target index node, expr2 = value), 7 expression statement,
 //   8 field-set (expr = target field node, expr2 = value), 9 class declaration
 //   (name = class name, params = field-name list, thenB = method func Stmts),
@@ -30,7 +31,9 @@ class Node { I64 op; I64 val; U8 name; Node left; Node right; U0[] args; }
 //   12 switch (expr = discriminant, thenB = list of case Stmts),
 //   13 case (expr = case value, or NULL for `default`; thenB = body),
 //   14 break,
-//   15 HolyC print (thenB = arg Nodes; thenB[0] is the format string).
+//   15 HolyC print (thenB = arg Nodes; thenB[0] is the format string),
+//   16 typed declaration (`I64 x = e;` — introduces a function-local, or a
+//   global at top level; like kind 0 but always a fresh binding).
 //   thenB/elseB hold Stmt lists; params holds a func's parameter names or a
 //   class's field names.
 class Stmt { I64 kind; U8 name; Node expr; U0[] thenB; U0[] elseB; U0[] params; Node expr2; }
