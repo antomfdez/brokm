@@ -50,6 +50,18 @@ test-embed: embed
 	  echo "embed: FAIL"; diff examples/embed.expected /tmp/brokm-embed.out; exit 1; \
 	fi
 
+# Self-hosting check: the in-brokm compiler (examples/realcc.bk) must agree with
+# the C compiler. Run a real brokm program (examples/sample.bk) directly, then
+# read + compile + run the same file via the in-brokm compiler, and diff.
+test-selfcompile: $(BIN)
+	@./brokm examples/sample.bk > /tmp/brokm-direct.out 2>&1; \
+	./brokm examples/selfcompile.bk > /tmp/brokm-selfcc.out 2>&1; \
+	if diff /tmp/brokm-direct.out /tmp/brokm-selfcc.out >/dev/null; then \
+	  echo "selfcompile: OK (C compiler == in-brokm compiler)"; \
+	else \
+	  echo "selfcompile: FAIL"; diff /tmp/brokm-direct.out /tmp/brokm-selfcc.out; exit 1; \
+	fi
+
 # Benchmark the JIT against the interpreter on a recursion-heavy program.
 bench:
 	$(CC) $(CFLAGS) -o /tmp/brokm-jit $(SRC) $(LDFLAGS)

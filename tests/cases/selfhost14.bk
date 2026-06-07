@@ -1,0 +1,12 @@
+// Self-hosting step 16 — compile a REAL brokm program with the in-brokm
+// compiler. examples/sample.bk is an ordinary brokm program (the C compiler runs
+// it directly); here it is read from disk and compiled by realcc, then run on
+// the C VM. `make test-selfcompile` checks the two paths agree; this test puts
+// the realcc path under the four-way (interpreter / JIT / GC-stress) matrix.
+//
+// The path is relative to the repository root, where the test runner executes.
+#include "../../examples/realcc.bk"
+
+U8 src = ReadFile("examples/sample.bk");
+U0 prog = Compile(src);
+prog();

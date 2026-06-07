@@ -1,0 +1,9 @@
+// selfcompile.bk — read a real brokm program from disk (examples/sample.bk) and
+// compile it with the in-brokm compiler (examples/realcc.bk), then run the
+// result on the C VM. `make test-selfcompile` diffs this against running the
+// same file directly, proving the in-brokm compiler agrees with the C compiler.
+#include "realcc.bk"
+
+U8 src = ReadFile("examples/sample.bk");
+U0 prog = Compile(src);
+prog();

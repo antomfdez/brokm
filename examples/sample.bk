@@ -1,0 +1,60 @@
+// sample.bk — a real brokm program that also lies within the subset the
+// in-brokm compiler (examples/realcc.bk) understands. Running it directly (the
+// C compiler) and compiling it with realcc both produce identical output, which
+// is what `make test-selfcompile` and tests/cases/selfhost14.bk check.
+//
+// To stay in the intersection of the two grammars it uses typed declarations
+// throughout (brokm requires variables to be declared; realcc accepts the
+// builtin type keywords) and `U0` for instance variables (realcc does not yet
+// accept user class names as type prefixes, but both accept `U0`).
+
+I64 Fib(I64 n) {
+  if (n < 2) { return n; }
+  return Fib(n - 1) + Fib(n - 2);
+}
+
+I64 Gcd(I64 a, I64 b) {
+  while (b != 0) {
+    I64 t = b;
+    b = a % b;
+    a = t;
+  }
+  return a;
+}
+
+class Counter {
+  I64 n;
+  U0 Inc() { this.n = this.n + 1; }
+  U0 Add(I64 k) { this.n = this.n + k; }
+  I64 Get() { return this.n; }
+}
+
+U0 Classify(I64 d) {
+  switch (d) {
+    case 0: "zero\n"; break;
+    case 1: "one\n"; break;
+    case 2: "two\n"; break;
+    default: "many\n";
+  }
+}
+
+"== Fib ==\n";
+I64 i = 0;
+for (i = 0; i < 8; i = i + 1) {
+  "Fib(%d) = %d\n", i, Fib(i);
+}
+
+"== Gcd ==\n";
+"Gcd(48, 36) = %d\n", Gcd(48, 36);
+"Gcd(1071, 462) = %d\n", Gcd(1071, 462);
+
+"== Counter ==\n";
+U0 c = Counter(0);
+i = 0;
+while (i < 5) { c.Inc(); i = i + 1; }
+c.Add(100);
+"counter = %d\n", c.Get();
+
+"== Classify ==\n";
+i = 0;
+for (i = 0; i < 4; i = i + 1) { Classify(i); }

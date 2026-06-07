@@ -10,7 +10,13 @@ U0[] Tokenize(U8 src)
   I64 i = 0;
   while (i < n) {
     I64 c = CharAt(src, i);
-    if (IsSpace(c)) {
+    if (c == 47 && i + 1 < n && CharAt(src, i + 1) == 47) {   // // line comment
+      while (i < n && CharAt(src, i) != 10) i = i + 1;
+    } else if (c == 47 && i + 1 < n && CharAt(src, i + 1) == 42) {  // /* block */
+      i = i + 2;
+      while (i + 1 < n && !(CharAt(src, i) == 42 && CharAt(src, i + 1) == 47)) i = i + 1;
+      i = i + 2;                       // skip the closing */
+    } else if (IsSpace(c)) {
       i = i + 1;
     } else if (IsDigit(c)) {
       I64 start = i;
