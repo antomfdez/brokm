@@ -12,6 +12,10 @@ Gcd(48, 36) = 12
 Gcd(1071, 462) = 21
 == Counter ==
 counter = 105
+== Points ==
+dist = 7
+== List ==
+sum = 60
 == Classify ==
 zero
 one

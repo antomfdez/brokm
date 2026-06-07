@@ -446,14 +446,24 @@ Can brokm compile itself? Eventually, yes — and brokm now hosts the front-end 
   intersection `sample.bk` uses typed declarations throughout and `U0` for instance variables (realcc
   does not yet accept user class names as type prefixes). `tests/cases/selfhost14.bk` compiles
   `sample.bk` under the four-way (interpreter / JIT / GC-stress) matrix.
+- **Step 17 — class names as type prefixes ✅.** realcc now recognizes a declared **class name as a
+  type**, exactly as brokm does: it keeps a registry of class names (filled when a class declaration is
+  parsed, before its body, so self-references work) and accepts them wherever a builtin type keyword is
+  accepted — variable declarations (`Counter c = Counter(0);`), function parameters (`Point a`), return
+  types, and self-referential fields (`class Node { I64 val; Node next; }`). A leading `ClassName (` is
+  still a constructor call, not a declaration, so the two never collide. Parser-only and gradual (the
+  type is discarded), so no codegen change. `examples/sample.bk` now uses natural class-typed
+  declarations throughout (no more `U0` stand-ins), and still compiles byte-identically via both the C
+  and in-brokm compilers (`make test-selfcompile`). Verified red/green: stubbing the registry makes
+  `sample.bk` fail to parse.
 - **Path:** lexer ✅ → parser/AST ✅ → code generator ✅ → real bytecode ✅ → control flow ✅ →
   functions ✅ → locals ✅ → arrays ✅ → strings ✅ → types + maps ✅ → structs ✅ → methods ✅ →
-  `for`/`do`-`while` ✅ → `switch` ✅ → HolyC print ✅ → **real brokm source ✅**. The in-brokm compiler
-  is a real, small language back-end that compiles a usable subset of brokm itself, agreeing with the C
-  compiler. Next: widen that subset toward all of brokm — user class names as type prefixes (`Point p`),
-  bitwise/logical operators, `++`/`--`, and richer declarations — so larger real programs (eventually
-  realcc itself) compile. Then — much later — a runtime in brokm, retiring the C bootstrap. The baseline
-  JIT matters here: a self-hosted compiler is compute-heavy.
+  `for`/`do`-`while` ✅ → `switch` ✅ → HolyC print ✅ → real brokm source ✅ → class-typed declarations ✅.
+  The in-brokm compiler compiles a usable subset of brokm itself, agreeing with the C compiler. Next:
+  keep widening the subset — bitwise/logical operators (`& | ^ << >> && ||`), `++`/`--`, and richer
+  declarations — so larger real programs (eventually realcc itself) compile. Then — much later — a
+  runtime in brokm, retiring the C bootstrap. The baseline JIT matters here: a self-hosted compiler is
+  compute-heavy.
 
 ## Language features tracked across milestones
 
