@@ -473,14 +473,25 @@ Can brokm compile itself? Eventually, yes — and brokm now hosts the front-end 
   global, exactly as brokm treats forward declarations. Both confirmed identical to the C compiler.
   `examples/sample.bk` gained a `Grade`/`Sign` example (forward-declared `Grade`, `if/else if/else`
   ladder); `tests/cases/selfhost16.bk` is a focused test.
+- **Step 20 — braceless bodies + deeper recursion ✅.** Working toward realcc compiling its own modules
+  surfaced two blockers (found by feeding each `realcc_*.bk` module back through realcc). First, the C
+  VM's call-frame limit (`BK_FRAMES_MAX`) was only 64 — realcc's layered recursive-descent parser, ~12
+  precedence levels deep, overflowed it on realistic nested-call source; raised to 256 (still iterative
+  in the interpreter, fine under JIT and GC stress). Second, realcc required braces on every control-flow
+  body, but brokm (and realcc's own source — `if (word == "print") Append(...);`, `while (c) i = i + 1;`)
+  allows a single statement; a new `ParseBody` accepts either a block or one statement for `if`/`else`/
+  `while`/`for`/`do` (function bodies still require braces, as in brokm). With both, realcc now compiles
+  its `realcc_types` and `realcc_lex` modules (up from `realcc_types` only). `tests/cases/selfhost17.bk`
+  covers braceless `if`/`else if`/`else`/`for`/`while`/`do`; `examples/sample.bk` gained a braceless
+  `Clamp`.
 - **Path:** lexer ✅ → parser/AST ✅ → code generator ✅ → real bytecode ✅ → control flow ✅ →
   functions ✅ → locals ✅ → arrays ✅ → strings ✅ → types + maps ✅ → structs ✅ → methods ✅ →
   `for`/`do`-`while` ✅ → `switch` ✅ → HolyC print ✅ → real brokm source ✅ → class-typed declarations ✅
-  → full operator set ✅ → `else if` + prototypes ✅. The in-brokm compiler compiles a substantial subset
-  of brokm itself, agreeing with the C compiler. The remaining gaps toward compiling realcc itself are
-  smaller sugar (`++`/`--`, compound assignment, multiple declarators) and any builtins realcc's source
-  uses. Then — much later — a runtime in brokm, retiring the C bootstrap. The baseline JIT matters here:
-  a self-hosted compiler is compute-heavy.
+  → full operator set ✅ → `else if` + prototypes ✅ → braceless bodies ✅. realcc now compiles its own
+  `types` and `lex` modules; the remaining modules (`parse`, `gen`) need a few more constructs (surfaced
+  as further parse/codegen gaps) before realcc compiles itself end-to-end. Then — much later — a runtime
+  in brokm, retiring the C bootstrap. The baseline JIT matters here: a self-hosted compiler is
+  compute-heavy.
 
 ## Language features tracked across milestones
 

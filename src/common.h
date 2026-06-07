@@ -17,8 +17,11 @@ typedef int32_t  I32;
 typedef int64_t  I64;
 typedef double   F64;
 
-/* VM tunables. Stack is sized so each call frame gets a full slot window. */
-#define BK_FRAMES_MAX 64
+/* VM tunables. Stack is sized so each call frame gets a full slot window.
+ * FRAMES_MAX is deep enough for recursion-heavy programs such as the in-brokm
+ * compiler (examples/realcc.bk), whose layered recursive-descent parser nests
+ * many calls deep on realistic source. */
+#define BK_FRAMES_MAX 256
 #define BK_SLOT_COUNT 256
 #define BK_STACK_MAX  (BK_FRAMES_MAX * BK_SLOT_COUNT)
 #define BK_API_ROOTS_MAX 256 /* C-API temporary roots (embedding value exchange) */

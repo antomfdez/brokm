@@ -225,6 +225,16 @@ U0[] ParseBlock()
   return body;
 }
 
+// A control-flow body: either a braced block or a single statement (C-style, as
+// brokm allows: `if (c) stmt;`, `while (c) stmt;`). Returns a statement list.
+U0[] ParseBody()
+{
+  if (PeekKind() == 123) return ParseBlock();   // '{'
+  U0[] one = [];
+  Append(one, ParseStmt());
+  return one;
+}
+
 // Parse a parenthesised parameter list `( [type] name, ... )` (the leading '('
 // is the current token) into a list of parameter names. Optional HolyC-style
 // type prefixes (with an optional `[]`) are consumed and discarded, so both
@@ -320,7 +330,7 @@ Stmt ParseStmt()
     Advance();                             // '('
     Node cond = ParseExpr();
     Advance();                             // ')'
-    U0[] thenB = ParseBlock();
+    U0[] thenB = ParseBody();
     U0[] elseB = NULL;
     if (PeekKind() == 260) {               // else
       Advance();
@@ -328,7 +338,7 @@ Stmt ParseStmt()
         elseB = [];
         Append(elseB, ParseStmt());
       } else {
-        elseB = ParseBlock();
+        elseB = ParseBody();
       }
     }
     return Stmt(2, NULL, cond, thenB, elseB, NULL);
@@ -338,7 +348,7 @@ Stmt ParseStmt()
     Advance();                             // '('
     Node cond = ParseExpr();
     Advance();                             // ')'
-    U0[] body = ParseBlock();
+    U0[] body = ParseBody();
     return Stmt(3, NULL, cond, body, NULL, NULL);
   }
   if (PeekKind() == 267) {                 // for ( init ; cond ; incr ) block
@@ -349,14 +359,14 @@ Stmt ParseStmt()
     Advance();                             // ';'
     Stmt incr = ParseAssignNoSemi();
     Advance();                             // ')'
-    U0[] body = ParseBlock();
+    U0[] body = ParseBody();
     U0[] initL = []; Append(initL, init);
     U0[] incrL = []; Append(incrL, incr);
     return Stmt(10, NULL, cond, body, initL, incrL, NULL);
   }
   if (PeekKind() == 268) {                 // do block while ( cond ) ;
     Advance();
-    U0[] body = ParseBlock();
+    U0[] body = ParseBody();
     Advance();                             // 'while'
     Advance();                             // '('
     Node cond = ParseExpr();
