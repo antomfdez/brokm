@@ -306,6 +306,17 @@ Stmt ParseStmt()
     Advance();                             // ';'
     return Stmt(1, NULL, e, NULL, NULL, NULL);
   }
+  if (PeekKind() == 264) {                 // HolyC print: "fmt", arg, ... ;
+    U0[] args = [];
+    Append(args, MakeStr(toks[pos].name));  // the format string
+    Advance();
+    while (PeekKind() == 44) {              // ',' trailing printf-style args
+      Advance();
+      Append(args, ParseExpr());
+    }
+    Advance();                             // ';'
+    return Stmt(15, NULL, NULL, args, NULL, NULL, NULL);
+  }
   // HolyC-style typed declaration: a type keyword (optionally with `[]`)
   // followed by a name introduces a typed variable (`I64 x = expr;`, `U0[] a =
   // ...;`, or `I64 x;` defaulting to 0) or a typed function

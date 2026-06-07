@@ -1,0 +1,21 @@
+// Self-hosting step 15 — HolyC `"...";` print statements in the in-brokm
+// compiler, matching brokm's own grammar: a statement that begins with a string
+// literal is printed, with optional printf-style trailing arguments
+// (`"x = %d\n", x;`). Cross-directory #include exercises the module system and
+// the split realcc modules. Covers %d, %s, multiple arguments, a no-argument
+// string, and a print driven by a loop calling a recursive function.
+//
+// Reminder: the inner program is a brokm string; its \" and \n are unescaped
+// once by brokm's lexer before realcc's lexer sees them.
+#include "../../examples/realcc.bk"
+
+U0 prog = Compile("
+  \"%d\n\", 6 * 7;
+  who = \"brokm\";
+  \"hello, %s\n\", who;
+  \"%d + %d = %d\n\", 2, 3, 2 + 3;
+  func fib(n) { if (n < 2) { return n; } return fib(n - 1) + fib(n - 2); }
+  i = 0;
+  while (i < 6) { \"fib(%d) = %d\n\", i, fib(i); i = i + 1; }
+");
+prog();

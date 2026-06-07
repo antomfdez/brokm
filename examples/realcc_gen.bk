@@ -194,6 +194,12 @@ U0 GenStmt(Stmt s)
     EmitArg(ROP_PRINT, 2);
     return;
   }
+  if (s.kind == 15) {                         // HolyC print: "fmt", args...
+    I64 i = 0;                                 // thenB[0] is the format string
+    while (i < Len(s.thenB)) { GenExpr(s.thenB[i]); i = i + 1; }
+    EmitArg(ROP_PRINT, Len(s.thenB));
+    return;
+  }
   if (s.kind == 2) {                          // if (cond) then [else]
     GenExpr(s.expr);
     I64 thenJump = EmitJump(ROP_JUMP_IF_FALSE);

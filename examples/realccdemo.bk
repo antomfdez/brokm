@@ -175,3 +175,15 @@ U0 switchProg = Compile("
   while (i <= 5) { name(i); i = i + 1; }
 ");
 switchProg();                                           // one / two / three / many / many
+
+// HolyC print (step 15): a leading string literal is a print statement, with
+// printf-style trailing args — exactly as brokm's own grammar spells it.
+U0 printProg = Compile("
+  \"-- HolyC printing --\n\";
+  lang = \"brokm\";
+  \"%s squares:\n\", lang;
+  func sq(n) { return n * n; }
+  i = 1;
+  while (i <= 5) { \"  %d -> %d\n\", i, sq(i); i = i + 1; }
+");
+printProg();                                            // brokm squares: 1->1 2->4 3->9 4->16 5->25

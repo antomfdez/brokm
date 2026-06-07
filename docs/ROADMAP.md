@@ -429,13 +429,20 @@ Can brokm compile itself? Eventually, yes — and brokm now hosts the front-end 
   (including no-match), a switch inside a function with locals, and a nested switch — byte-identical
   four ways. (The `arithmetic.bk` `3.5`-vs-`3` regression from a first, too-loose dedup confirmed the
   strict-identity requirement red/green.)
+- **Step 15 — HolyC `"...";` print statements ✅.** `examples/realcc.bk` now matches brokm's own print
+  grammar: a statement that begins with a string literal is printed, with optional printf-style
+  trailing arguments (`"x = %d\n", x;`), going straight through `OP_PRINT` and the same `bk_format`
+  the C VM uses (so `%d`/`%s`/`%f`/… all work). Zero C changes — the bridge already exposed everything.
+  The toy `print expr;` keyword stays for the existing tests, so the grammar is a superset.
+  `tests/cases/selfhost13.bk` covers `%d`, `%s`, multiple arguments, a no-argument string, and a print
+  driven by a loop over a recursive `fib` — byte-identical four ways.
 - **Path:** lexer ✅ → parser/AST ✅ → code generator ✅ → real bytecode ✅ → control flow ✅ →
   functions ✅ → locals ✅ → arrays ✅ → strings ✅ → types + maps ✅ → structs ✅ → methods ✅ →
-  `for`/`do`-`while` ✅ → `switch` ✅. The in-brokm compiler is now a real, small language back-end
-  covering values, control flow (including `switch`), functions, aggregates, strings, maps, and
-  user-defined types with methods — its surface syntax substantially overlaps brokm's. The main
-  remaining gap before it could compile brokm itself is matching brokm's exact grammar (e.g. `"...";`
-  print statements, `U0`-returning command-style calls). Then — much later — a runtime in brokm,
+  `for`/`do`-`while` ✅ → `switch` ✅ → HolyC print ✅. The in-brokm compiler is a real, small language
+  back-end covering values, control flow (including `switch`), functions, aggregates, strings, maps,
+  user-defined types with methods, and brokm's own print syntax — its surface grammar now overlaps a
+  usable subset of brokm's. The next milestone is to point it at real brokm source (a hand-written
+  subset first, then progressively more of the language). Then — much later — a runtime in brokm,
   retiring the C bootstrap. The baseline JIT matters here: a self-hosted compiler is compute-heavy.
 
 ## Language features tracked across milestones
