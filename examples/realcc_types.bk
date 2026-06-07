@@ -6,7 +6,7 @@
 // ---- AST / token types -----------------------------------------------------
 // Tok.kind: 256 number, 257 ident, 258 print, 259 if, 260 else, 261 while,
 //   262 func, 263 return, 264 string (value in `name`), 265 class, 266 NULL,
-//   267 for, 268 do, 0 EOF,
+//   267 for, 268 do, 269 switch, 270 case, 271 default, 272 break, 0 EOF,
 //   two-char ops 280 `==` 281 `!=` 282 `<=` 283 `>=`, else op char code.
 class Tok  { I64 kind; I64 val; U8 name; }
 // Node.op: 256 number, 257 variable, 264 string, 110 negate, 300 call,
@@ -22,7 +22,10 @@ class Node { I64 op; I64 val; U8 name; Node left; Node right; U0[] args; }
 //   8 field-set (expr = target field node, expr2 = value), 9 class declaration
 //   (name = class name, params = field-name list, thenB = method func Stmts),
 //   10 for (expr = cond, thenB = body, elseB = [init Stmt], params = [incr Stmt]),
-//   11 do-while (expr = cond, thenB = body).
+//   11 do-while (expr = cond, thenB = body),
+//   12 switch (expr = discriminant, thenB = list of case Stmts),
+//   13 case (expr = case value, or NULL for `default`; thenB = body),
+//   14 break.
 //   thenB/elseB hold Stmt lists; params holds a func's parameter names or a
 //   class's field names.
 class Stmt { I64 kind; U8 name; Node expr; U0[] thenB; U0[] elseB; U0[] params; Node expr2; }

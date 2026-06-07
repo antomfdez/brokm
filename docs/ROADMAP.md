@@ -416,14 +416,27 @@ Can brokm compile itself? Eventually, yes — and brokm now hosts the front-end 
   `realcc_gen.bk`, stitched together by `realcc.bk` via `#include` (dogfooding v0.10 modules); every
   test and demo that includes `realcc.bk` picks them up transitively. `tests/cases/selfhost11.bk`
   covers top-level, in-function, and nested `for` loops plus a `do`-`while` — byte-identical four ways.
+- **Step 14 — `switch` / `case` / `default` / `break` ✅.** `examples/realcc.bk` gained C-style
+  `switch` with fallthrough: the discriminant is evaluated once (into a reusable global), equality
+  tests chain to each case body, bodies fall through to the next case until a `break`, and `default`
+  may sit anywhere in the chain. This forced one enabling **C change** — the compiler's `make_constant`
+  now **deduplicates constants** (strict type+payload identity, so an int and an equal float stay
+  distinct). realcc had grown enough top-level functions and globals — e.g. the name `Opcode`
+  referenced from 31 `ROP_*` initializers — that the `<script>` chunk blew past the single-byte
+  256-constant limit; pooling identical constants brings it well under, and is a general win for any
+  large brokm program. The switch code generator is its own function (`GenSwitch`) so its constants
+  live in a separate chunk. `tests/cases/selfhost12.bk` covers fallthrough, `break`, `default`
+  (including no-match), a switch inside a function with locals, and a nested switch — byte-identical
+  four ways. (The `arithmetic.bk` `3.5`-vs-`3` regression from a first, too-loose dedup confirmed the
+  strict-identity requirement red/green.)
 - **Path:** lexer ✅ → parser/AST ✅ → code generator ✅ → real bytecode ✅ → control flow ✅ →
   functions ✅ → locals ✅ → arrays ✅ → strings ✅ → types + maps ✅ → structs ✅ → methods ✅ →
-  `for`/`do`-`while` ✅. The in-brokm compiler is now a real, small language back-end covering values,
-  control flow, functions, aggregates, strings, maps, and user-defined types with methods — its
-  surface syntax substantially overlaps brokm's. Remaining gaps before it could compile brokm itself:
-  `switch` and matching brokm's exact grammar (e.g. `"...";` print statements). Then — much later — a
-  runtime in brokm, retiring the C bootstrap. The baseline JIT matters here: a self-hosted compiler is
-  compute-heavy.
+  `for`/`do`-`while` ✅ → `switch` ✅. The in-brokm compiler is now a real, small language back-end
+  covering values, control flow (including `switch`), functions, aggregates, strings, maps, and
+  user-defined types with methods — its surface syntax substantially overlaps brokm's. The main
+  remaining gap before it could compile brokm itself is matching brokm's exact grammar (e.g. `"...";`
+  print statements, `U0`-returning command-style calls). Then — much later — a runtime in brokm,
+  retiring the C bootstrap. The baseline JIT matters here: a self-hosted compiler is compute-heavy.
 
 ## Language features tracked across milestones
 

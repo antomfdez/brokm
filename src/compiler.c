@@ -54,8 +54,35 @@ static void emit_bytes(U8 a, U8 b) {
   emit_byte(b);
 }
 
+/* Strict identity for constant pooling: same type and same payload. Unlike
+ * value_equal this keeps an int and a float of equal magnitude distinct (they
+ * are different constants with different runtime behaviour) and never reads an
+ * int payload as a double. Interned strings share a pointer, so equal string
+ * literals fold together. */
+static bool same_constant(Value a, Value b) {
+  if (a.type != b.type) return false;
+  switch (a.type) {
+    case VAL_NIL:   return true;
+    case VAL_BOOL:  return AS_BOOL(a) == AS_BOOL(b);
+    case VAL_INT:   return AS_INT(a) == AS_INT(b);
+    case VAL_FLOAT: return AS_F64(a) == AS_F64(b);
+    case VAL_OBJ:   return AS_OBJ(a) == AS_OBJ(b);
+    case VAL_PTR:   return AS_PTR(a) == AS_PTR(b);
+    default:        return false;
+  }
+}
+
 static int make_constant(Value value) {
-  int constant = chunk_add_constant(current_chunk(), value);
+  /* Reuse an identical existing constant rather than appending a duplicate, so a
+   * chunk with many repeated literals (e.g. the same global name referenced
+   * dozens of times) stays within the single-byte 256-constant limit. Distinct
+   * object constants such as functions and classes never compare equal, so each
+   * keeps its own slot. */
+  Chunk *chunk = current_chunk();
+  for (int i = 0; i < chunk->constants.count; i++) {
+    if (same_constant(chunk->constants.values[i], value)) return i;
+  }
+  int constant = chunk_add_constant(chunk, value);
   if (constant > 255) {
     compile_error("Too many constants in one chunk.");
     return 0;

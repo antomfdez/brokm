@@ -30,6 +30,10 @@ U0[] Tokenize(U8 src)
       else if (word == "NULL")   Append(out, Tok(266, 0, NULL));
       else if (word == "for")    Append(out, Tok(267, 0, NULL));
       else if (word == "do")     Append(out, Tok(268, 0, NULL));
+      else if (word == "switch") Append(out, Tok(269, 0, NULL));
+      else if (word == "case")   Append(out, Tok(270, 0, NULL));
+      else if (word == "default")Append(out, Tok(271, 0, NULL));
+      else if (word == "break")  Append(out, Tok(272, 0, NULL));
       else                       Append(out, Tok(257, 0, word));
     } else if (c == 34) {              // string literal "..."
       i = i + 1;                       // skip opening quote

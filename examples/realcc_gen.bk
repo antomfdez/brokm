@@ -45,6 +45,10 @@ I64 ROP_RETURN        = Opcode("RETURN");
 U0[] rcode    = [];
 U0[] rconsts  = [];
 U0[] curLocals = NULL;
+// The enclosing switch's list of `break` jump operand indices, to be patched to
+// the switch's end; NULL outside any switch. Saved/restored around each switch
+// so nested switches each collect their own.
+U0[] swBreaks = NULL;
 
 I64 AddConst(U0 v)           { I64 i = Len(rconsts); Append(rconsts, v); return i; }
 U0  Emit(I64 op)             { Append(rcode, op); }
@@ -173,6 +177,7 @@ U0 GenExpr(Node n)
 
 U0 GenStmts(U0[] stmts);   // forward declaration
 U0 GenFunction(Stmt fn);   // forward declaration
+U0 GenSwitch(Stmt s);      // forward declaration
 
 U0 GenStmt(Stmt s)
 {
@@ -236,6 +241,11 @@ U0 GenStmt(Stmt s)
     Emit(ROP_POP);                            // loop exited: discard cond
     return;
   }
+  if (s.kind == 12) { GenSwitch(s); return; }  // switch (disc) { cases }
+  if (s.kind == 14) {                         // break -> jump to enclosing switch end
+    Append(swBreaks, EmitJump(ROP_JUMP));
+    return;
+  }
   if (s.kind == 4) {                          // return expr
     GenExpr(s.expr);
     Emit(ROP_RETURN);
@@ -289,6 +299,64 @@ U0 GenStmts(U0[] stmts)
   }
 }
 
+// Compile a switch statement. The discriminant is evaluated once into a reusable
+// global, then equality tests chain to each case body; matching bodies fall
+// through to the next case (C-style) until a `break`. `default` is linked after
+// the test chain. (Limitation: the discriminant is read from the global during
+// the straight-line test phase, so avoid side effects in case-value expressions.)
+// Kept as its own function so its constants live in a separate chunk (a single
+// chunk holds at most 256).
+U0 GenSwitch(Stmt s)
+{
+  GenExpr(s.expr);
+  EmitArg(ROP_DEFINE_GLOBAL, AddConst("__switch"));
+
+  U0[] savedBreaks = swBreaks;
+  swBreaks = [];
+  U0[] cases = s.thenB;
+  U0[] bodyJumps = [];                       // per case: body jump operand, or -1 for default
+  I64 i = 0;
+  while (i < Len(cases)) {
+    Stmt c = cases[i];
+    if (c.expr == NULL) {
+      Append(bodyJumps, 0 - 1);              // default: patched into noMatch later
+    } else {
+      EmitArg(ROP_GET_GLOBAL, AddConst("__switch"));
+      GenExpr(c.expr);
+      Emit(ROP_EQUAL);
+      I64 skip = EmitJump(ROP_JUMP_IF_FALSE);
+      Emit(ROP_POP);                         // matched: discard comparison result
+      Append(bodyJumps, EmitJump(ROP_JUMP)); // jump to this case's body
+      PatchJump(skip);
+      Emit(ROP_POP);                         // not matched: discard comparison result
+    }
+    i = i + 1;
+  }
+  I64 noMatch = EmitJump(ROP_JUMP);          // to the default body, or to the end
+
+  I64 defaultBody = 0 - 1;
+  i = 0;
+  while (i < Len(cases)) {
+    Stmt c = cases[i];
+    if (c.expr == NULL) defaultBody = Len(rcode);
+    else                PatchJump(bodyJumps[i]);
+    GenStmts(c.thenB);                        // body; falls through to the next
+    i = i + 1;
+  }
+
+  if (defaultBody >= 0) {                     // point noMatch at the default body
+    I64 jump = defaultBody - noMatch - 2;
+    rcode[noMatch]     = (jump >> 8) & 255;
+    rcode[noMatch + 1] = jump & 255;
+  } else {
+    PatchJump(noMatch);
+  }
+
+  i = 0;                                      // patch every break to the end
+  while (i < Len(swBreaks)) { PatchJump(swBreaks[i]); i = i + 1; }
+  swBreaks = savedBreaks;
+}
+
 // Collect the names assigned anywhere in a statement list (recursing into if /
 // while / for / do-while bodies and a for loop's init and increment, but not
 // into nested function definitions) that are not already known, appending them
@@ -312,6 +380,9 @@ U0 CollectLocals(U0[] stmts, U0[] locals)
       CollectLocals(s.params, locals);
     } else if (s.kind == 11) {                          // do-while: body
       CollectLocals(s.thenB, locals);
+    } else if (s.kind == 12) {                          // switch: each case body
+      I64 j = 0;
+      while (j < Len(s.thenB)) { CollectLocals(s.thenB[j].thenB, locals); j = j + 1; }
     }
     i = i + 1;
   }

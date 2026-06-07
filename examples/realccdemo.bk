@@ -158,3 +158,20 @@ U0 loopProg = Compile("
   Print(\"doublings to 1000 = \"); print count;
 ");
 loopProg();                                             // sum 1..10 = 55 / 2^10 = 1024 / doublings = 10
+
+// Switch (step 14): C-style fallthrough, break, and default, with a FizzBuzz-ish
+// classifier driven by a while loop over 1..7.
+U0 switchProg = Compile("
+  Print(\"-- switch --\n\");
+  func name(d) {
+    switch (d) {
+      case 1: Print(\"one\n\"); break;
+      case 2: Print(\"two\n\"); break;
+      case 3: Print(\"three\n\"); break;
+      default: Print(\"many\n\");
+    }
+  }
+  i = 1;
+  while (i <= 5) { name(i); i = i + 1; }
+");
+switchProg();                                           // one / two / three / many / many

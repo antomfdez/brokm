@@ -271,6 +271,35 @@ Stmt ParseStmt()
     Advance();                             // ';'
     return Stmt(11, NULL, cond, body, NULL, NULL, NULL);
   }
+  if (PeekKind() == 269) {                 // switch ( disc ) { case E: ... default: ... }
+    Advance();
+    Advance();                             // '('
+    Node disc = ParseExpr();
+    Advance();                             // ')'
+    Advance();                             // '{'
+    U0[] cases = [];
+    while (PeekKind() != 125 && PeekKind() != 0) {
+      Node cval = NULL;
+      if (PeekKind() == 270) {             // case E :
+        Advance();
+        cval = ParseExpr();
+      } else {                             // default :
+        Advance();
+      }
+      Advance();                           // ':'
+      U0[] body = [];
+      while (PeekKind() != 270 && PeekKind() != 271 &&
+             PeekKind() != 125 && PeekKind() != 0) Append(body, ParseStmt());
+      Append(cases, Stmt(13, NULL, cval, body, NULL, NULL, NULL));
+    }
+    Advance();                             // '}'
+    return Stmt(12, NULL, disc, cases, NULL, NULL, NULL);
+  }
+  if (PeekKind() == 272) {                 // break ;
+    Advance();
+    Advance();                             // ';'
+    return Stmt(14, NULL, NULL, NULL, NULL, NULL, NULL);
+  }
   if (PeekKind() == 258) {                 // print expr ;
     Advance();
     Node e = ParseExpr();

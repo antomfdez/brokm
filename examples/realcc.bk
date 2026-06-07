@@ -1,5 +1,5 @@
 // realcc.bk — a small imperative language compiled to brokm's REAL bytecode.
-// Self-hosting steps 4-13: from the Opcode/Assemble bridge (step 4) through
+// Self-hosting steps 4-14: from the Opcode/Assemble bridge (step 4) through
 // control flow (step 5), FUNCTION DEFINITIONS with parameters, recursion, and
 // calls (step 6), function-scoped LOCAL VARIABLES (step 7), ARRAYS with the
 // native stdlib in reach (step 8), STRING literals (step 9), HolyC-style TYPE
@@ -33,9 +33,12 @@
 //          | "while" "(" expr ")" block
 //          | "for" "(" stmt ";" expr ";" assign ")" block
 //          | "do" block "while" "(" expr ")" ";"
+//          | "switch" "(" expr ")" "{" case* "}"
+//          | "break" ";"
 //          | "class" ident "{" member* "}"
 //          | lvalue "=" expr ";"
 //          | expr ";"
+//   case   = ("case" expr | "default") ":" stmt*   (C-style fallthrough)
 //   member = [type | "func"] ident "(" [param ...] ")" block      (method)
 //          | [type] ident ";"                                     (field)
 //   block  = "{" stmt* "}"
