@@ -12,9 +12,9 @@ annotations before any code runs, **typed bytecode** that specializes the int ho
 **baseline JIT** that compiles hot functions to native code (**arm64 + x86-64**, with a full
 interpreter fallback), a **standard library** (file I/O, strings, math), **string-keyed maps**,
 a **C embedding API** (register natives, exchange values, call brokm from C), and **multi-file
-programs** via `#include` — enough to write a
-[small compiler in brokm](examples/complib.bk) that emits and runs its own stack bytecode
-(see [docs/ROADMAP.md](docs/ROADMAP.md)).
+programs** via `#include` — enough that a [compiler written in brokm](examples/realcc.bk) emits
+the VM's real bytecode and now **compiles its own source** (`make test-bootstrap`, byte-identical
+to the C compiler — see [docs/ROADMAP.md](docs/ROADMAP.md)).
 
 ```holyc
 // hello.bk — top-level code runs; a bare string statement prints.
@@ -112,7 +112,7 @@ Install instructions for each editor are in [`editors/README.md`](editors/README
 
 ## Status
 
-v0.5 runs real programs (arithmetic, variables, control flow, functions, recursion, strings,
+brokm runs real programs (arithmetic, variables, control flow, functions, recursion, strings,
 **dynamic arrays**, **classes/structs**, **manual memory**, printing) on a stack bytecode VM,
 with a precise **generational** mark-sweep collector (minor + major, young→old promotion) whose
 write barrier is exercised by array and field mutation and verified red/green. A **static type
@@ -135,10 +135,11 @@ red/green. Classes carry **methods** (`obj.m(args)` with an implicit `this`, dis
 new `OP_INVOKE`), so a compiler's data types can hold behavior. A **C embedding API** lets a host
 register native functions, exchange scalar and string values, read/set globals, and call brokm
 functions from C (`examples/embed.c`). **`#include`** splits a program across files — textual,
-include-once, resolved relative to each file. Putting it together, **`examples/complib.bk` is a
-small compiler written in brokm** (lex → parse → symbol-table map → **stack bytecode** → a
-bytecode VM in `MAlloc`'d memory) — self-hosting step 3, runnable identically on the interpreter
-and the JIT. Next up: targeting the C VM's real opcodes, then multi-instance VMs — see the roadmap.
+include-once, resolved relative to each file. Putting it together, **`examples/realcc.bk` is a
+compiler written in brokm** (lexer → parser → code generator) that emits the C VM's **real
+bytecode** and runs it directly — and it now **compiles its own complete source**: the
+self-compiled compiler produces byte-identical output to the C compiler (`make test-bootstrap`).
+Next up: a runtime in brokm and multi-instance VMs — see the roadmap.
 
 ## License
 

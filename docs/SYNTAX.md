@@ -1,6 +1,6 @@
-# brokm syntax (v0.1)
+# brokm syntax
 
-A HolyC-flavored, C-like language. This documents what v0.1 actually implements.
+A HolyC-flavored, C-like language. This documents the language as currently implemented.
 
 ## Comments
 
@@ -33,10 +33,10 @@ Split a program across files with `#include "path"`:
 
 `U0 U8 U16 U32 U64 I8 I16 I32 I64 F64 Bool`
 
-In v0.1 the runtime is dynamically represented (values are tagged `Int`, `Float`, `Bool`,
-`Nil`, or an object). Type annotations are accepted and drive declarations and parameter lists;
-**full static type checking arrives in v0.4**. The default integer is `I64`; `F64` is the
-floating type.
+The runtime is dynamically represented (values are tagged `Int`, `Float`, `Bool`,
+`Nil`, or an object). Type annotations drive declarations and parameter lists and are checked
+by a **gradual static type checker** (v0.4) before any code runs. The default integer is `I64`;
+`F64` is the floating type.
 
 ## Literals
 
@@ -313,13 +313,15 @@ Syntax highlighting for `.bk` files lives under [`editors/`](../editors/):
 
 See [`editors/README.md`](../editors/README.md) for per-editor install steps.
 
-## Known v0.1 simplifications
+## Known simplifications
 
 - Postfix `x++` evaluates to the **new** value (like prefix). Fine in loop increments; rarely
-  matters elsewhere. Will be made fully correct alongside typed bytecode.
+  matters elsewhere.
 - `continue` inside `do/while` jumps to the top of the body (re-runs it) rather than to the
   condition test.
 - Avoid declaring local variables directly inside `switch` case bodies (wrap logic in a function
   if needed) — case-body scoping is not modeled yet.
 - One variable per declaration (no `I64 a, b;` yet).
-- No pointers, structs/classes, `MAlloc/Free`, or modules yet — see ROADMAP.
+- No raw address-of (`&`/`*`) on managed values — raw pointers come only from `MAlloc`. Class
+  inheritance, static methods, and first-class/bound methods are also not implemented — see
+  [ROADMAP](ROADMAP.md).

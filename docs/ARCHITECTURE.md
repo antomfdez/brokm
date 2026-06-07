@@ -1,4 +1,4 @@
-# brokm architecture (v0.1)
+# brokm architecture
 
 ## Pipeline
 
@@ -9,7 +9,7 @@ source (.bk)
  tokens
    │  parser.c       recursive descent (statements) + Pratt (expressions)
    ▼
- AST  (ast.c/.h)     the seam for the type checker (v0.4) and the future JIT (v0.5)
+ AST  (ast.c/.h)     the seam for the type checker (v0.4) and the JIT (v0.5)
    │  typecheck.c    static type-checking pass over the AST (gradual; v0.4)
    ▼
  AST  (typed)
@@ -30,11 +30,12 @@ attach cleanly later — so it earns its keep.
 | File | Responsibility |
 |------|----------------|
 | `common.h` | fixed-width int aliases (`U8`…`I64`,`F64`), VM size tunables |
-| `memory.c` | `reallocate()` — the **single allocation chokepoint**; the GC will trigger here |
+| `memory.c` | `reallocate()` — the **single allocation chokepoint**; triggers the GC |
+| `gc.c` | generational mark-sweep collector (minor/major, write barrier, remembered set) |
 | `value.c` | `Value` tagged union, equality, truthiness, printing, constant arrays |
-| `object.c` | heap objects (`ObjString`, `ObjFunction`, `ObjNative`); string interning; teardown |
-| `table.c` | open-addressing hash table (globals + interned strings) |
-| `lexer.c` | hand-written scanner |
+| `object.c` | heap objects (`ObjString/Function/Native/Array/Class/Instance/Map`); interning; teardown |
+| `table.c` | open-addressing hash table (globals, interned strings, instance/map fields) |
+| `lexer.c` | hand-written scanner; resolves `#include` via a source-frame stack |
 | `ast.c` | AST nodes, list helpers, recursive free |
 | `parser.c` | tokens → AST |
 | `types.c` | the static type lattice (`Type`) and assignability rules |
@@ -42,16 +43,19 @@ attach cleanly later — so it earns its keep.
 | `compiler.c` | AST → bytecode |
 | `chunk.c` | bytecode buffer |
 | `vm.c` | the interpreter loop, call frames, globals |
+| `jit.c` | JIT driver: executable-page pool, profiling, dispatch + Value-layout asserts (v0.5) |
+| `jit_arm64.c` / `jit_x64.c` | per-arch encoders + bytecode walker (arm64 / x86-64) |
 | `debug.c` | bytecode disassembler |
-| `natives.c` | `Print` and the shared printf-style formatter |
-| `api.c` | public `brokm.h` implementation |
+| `natives.c` | the native stdlib — printf formatter, I/O, strings, math, maps, manual memory, JIT bridge |
+| `api.c` | public `brokm.h` implementation (value exchange, host natives, calls; v0.9) |
 | `main.c` | CLI / REPL |
 
 ## Value representation
 
-`Value` is a tagged union of `Nil | Bool | Int(I64) | Float(F64) | Obj*`. All access goes
-through the `IS_*` / `AS_*` / `*_VAL` macros in `value.h`, so the representation can later switch
-to NaN-boxing for speed without touching any call site.
+`Value` is a tagged union of `Nil | Bool | Int(I64) | Float(F64) | Ptr(void*) | Obj*`
+(`Ptr` is a raw, GC-invisible pointer from `MAlloc`). All access goes through the
+`IS_*` / `AS_*` / `*_VAL` macros in `value.h`, so the representation can later switch to
+NaN-boxing for speed without touching any call site.
 
 ## Heap objects and the GC seam
 
@@ -84,7 +88,8 @@ Dispatch is a portable `switch`. A computed-goto fast path can be added behind a
 
 ## Embedding model
 
-v0.1 uses a single process-global `VM` (`extern VM vm;`), which keeps `object.c` and `natives.c`
-free of VM-pointer plumbing. The public `brokm.h` API is intentionally narrow
-(`init / eval / run_file / shutdown`). Multi-instance embedding and a value-exchange C API are a
-later milestone.
+brokm uses a single process-global `VM` (`extern VM vm;`), which keeps `object.c` and `natives.c`
+free of VM-pointer plumbing. The public `brokm.h` API (v0.9) lets a host exchange scalar and
+string values, register C natives, read/set globals, and call brokm functions from C, on top of
+`init / eval / run_file / shutdown`. **Multi-instance embedding** (replacing the global `VM`)
+remains a later milestone.

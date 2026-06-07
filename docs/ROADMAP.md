@@ -484,14 +484,36 @@ Can brokm compile itself? Eventually, yes — and brokm now hosts the front-end 
   its `realcc_types` and `realcc_lex` modules (up from `realcc_types` only). `tests/cases/selfhost17.bk`
   covers braceless `if`/`else if`/`else`/`for`/`while`/`do`; `examples/sample.bk` gained a braceless
   `Clamp`.
+- **Step 21 — local/global scoping ✅.** realcc's step-7 codegen hoisted *every* name assigned in a
+  function as a local, so a function writing a top-level global silently created a shadowing local
+  instead — the first real blocker to realcc compiling its own source (`Parse` sets the shared
+  parser-state globals `toks`/`pos`, which under the old rule vanished into `Parse`-locals, leaving the
+  readers an empty token array). Fixed to match brokm's actual scoping: a local is introduced **only** by
+  a typed declaration (`I64 x = e`) or a parameter; a bare `x = e` targets an existing local or global and
+  never creates one. Typed declarations now emit a distinct statement kind, and codegen pre-collects the
+  top-level globals so a bare assignment to a global compiles to `OP_DEFINE_GLOBAL` while an untyped temp
+  still hoists (recursion through untyped locals keeps working). Pure `.bk` change.
+  `tests/cases/selfhost18.bk` covers a function writing a global, recursion through a bare-assign local,
+  and a typed global updated in a function — byte-identical four ways, red/green verified.
+- **Step 22 — true bootstrap ✅.** realcc now compiles its **own complete source**, and the self-compiled
+  compiler produces byte-identical output to the C compiler: C compiler == one-stage realcc ==
+  realcc-compiled-realcc, all three agree on `sample.bk`. The last blocker was realcc's `AddConst` using a
+  one-byte constant operand with no deduplication — `ParseStmt` alone (a long if/else chain over token
+  kinds) emitted more than 256 distinct constants, wrapping the byte and reading the wrong constant — the
+  same >256-constant overflow the C compiler solved in step 14. Fixed (pure `.bk`) by reusing an identical
+  existing constant before appending; safe because realcc's constants are only ints, interned strings, and
+  object values (no floats to confuse with equal-valued ints), and dedup changes indices but not output, so
+  all golden tests stay byte-identical. `examples/bootstrap.bk` is the two-stage driver (realcc compiles
+  realcc's four concatenated modules, runs the result to rebind `Compile`/`Parse`/`Tokenize`/… as the
+  brokm-compiled functions, then self-compiles `sample.bk`); `make test-bootstrap` diffs it against the C
+  compiler, and `tests/cases/selfhost19.bk` is the deterministic bootstrap under the four-way matrix.
 - **Path:** lexer ✅ → parser/AST ✅ → code generator ✅ → real bytecode ✅ → control flow ✅ →
   functions ✅ → locals ✅ → arrays ✅ → strings ✅ → types + maps ✅ → structs ✅ → methods ✅ →
   `for`/`do`-`while` ✅ → `switch` ✅ → HolyC print ✅ → real brokm source ✅ → class-typed declarations ✅
-  → full operator set ✅ → `else if` + prototypes ✅ → braceless bodies ✅. realcc now compiles its own
-  `types` and `lex` modules; the remaining modules (`parse`, `gen`) need a few more constructs (surfaced
-  as further parse/codegen gaps) before realcc compiles itself end-to-end. Then — much later — a runtime
-  in brokm, retiring the C bootstrap. The baseline JIT matters here: a self-hosted compiler is
-  compute-heavy.
+  → full operator set ✅ → `else if` + prototypes ✅ → braceless bodies ✅ → local/global scoping ✅ →
+  **self-hosting bootstrap ✅**. realcc now compiles its own complete source, byte-identical to the C
+  compiler (`make test-bootstrap`). Still ahead — much later — a runtime in brokm, retiring the C
+  bootstrap entirely. The baseline JIT matters here: a self-hosted compiler is compute-heavy.
 
 ## Language features tracked across milestones
 
