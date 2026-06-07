@@ -1,0 +1,37 @@
+// Self-hosting step 13 — `for` and `do`-`while` loops in the in-brokm compiler.
+// Cross-directory #include exercises the module system (v0.10); the realcc
+// compiler is itself now split across modules, so this transitively pulls in
+// realcc_types/lex/parse/gen. The toy program uses for loops at top level and
+// inside a function (locals collected from the init/body/increment), a nested
+// for, and a do-while that runs its body once before testing the condition.
+//
+// Reminder: the toy language has no `//` comments — keep them at the brokm level.
+#include "../../examples/realcc.bk"
+
+U0 prog = Compile("
+  sum = 0;
+  for (i = 1; i <= 100; i = i + 1) { sum = sum + i; }
+  print sum;
+
+  fact = 1;
+  for (k = 2; k <= 6; k = k + 1) { fact = fact * k; }
+  print fact;
+
+  func triangle(n) {
+    total = 0;
+    for (j = 1; j <= n; j = j + 1) { total = total + j; }
+    return total;
+  }
+  print triangle(10);
+
+  grid = 0;
+  for (a = 1; a <= 3; a = a + 1) {
+    for (b = 1; b <= 3; b = b + 1) { grid = grid + a * b; }
+  }
+  print grid;
+
+  m = 1; p = 0;
+  do { p = p + m; m = m + 1; } while (m <= 5);
+  print p;
+");
+prog();

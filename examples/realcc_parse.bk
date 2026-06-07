@@ -1,0 +1,340 @@
+// realcc_parse.bk — the recursive-descent parser for the realcc self-hosting
+// compiler: consumes the token array into a list of Stmt trees (functions,
+// classes with fields + methods, control flow, typed declarations, and
+// expressions with the usual precedence). Part of realcc.bk.
+
+// ---- parser ----------------------------------------------------------------
+U0[] toks = [];
+I64 pos = 0;
+
+I64 PeekKind() { return toks[pos].kind; }
+U0  Advance()  { pos = pos + 1; }
+
+Node MakeNum(I64 v)                  { return Node(256, v, NULL, NULL, NULL, NULL); }
+Node MakeNil()                       { return Node(305, 0, NULL, NULL, NULL, NULL); }
+Node MakeStr(U8 s)                   { return Node(264, 0, s, NULL, NULL, NULL); }
+Node MakeVar(U8 name)                { return Node(257, 0, name, NULL, NULL, NULL); }
+Node MakeNeg(Node c)                 { return Node(110, 0, NULL, c, NULL, NULL); }
+Node MakeBin(I64 op, Node l, Node r) { return Node(op, 0, NULL, l, r, NULL); }
+Node MakeCall(U8 name, U0[] args)    { return Node(300, 0, name, NULL, NULL, args); }
+Node MakeArray(U0[] elems)           { return Node(301, 0, NULL, NULL, NULL, elems); }
+Node MakeIndex(Node b, Node idx)     { return Node(302, 0, NULL, b, idx, NULL); }
+Node MakeField(Node obj, U8 name)    { return Node(303, 0, name, obj, NULL, NULL); }
+Node MakeInvoke(Node obj, U8 name, U0[] args) { return Node(304, 0, name, obj, NULL, args); }
+
+I64 IsCompare(I64 k) {
+  return k == 60 || k == 62 || k == 280 || k == 281 || k == 282 || k == 283;
+}
+
+// brokm scalar/aggregate type keywords. Accepted as declaration prefixes and
+// then ignored: like brokm itself, the toy language is gradually typed, so the
+// annotation is for syntax compatibility, not a runtime constraint.
+I64 IsTypeName(U8 w) {
+  return w == "I64" || w == "U0"  || w == "U8"  || w == "F64" || w == "Bool" ||
+         w == "I32" || w == "U32" || w == "I16" || w == "U16" || w == "I8";
+}
+
+Node ParseExpr();   // forward declaration
+
+Node ParsePrimary()
+{
+  Tok t = toks[pos];
+  if (t.kind == 256) { Advance(); return MakeNum(t.val); }
+  if (t.kind == 266) { Advance(); return MakeNil(); }
+  if (t.kind == 264) { Advance(); return MakeStr(t.name); }
+  if (t.kind == 257) {
+    Advance();
+    if (PeekKind() == 40) {                 // call:  name ( args )
+      Advance();                            // '('
+      U0[] args = [];
+      if (PeekKind() != 41) {
+        Append(args, ParseExpr());
+        while (PeekKind() == 44) { Advance(); Append(args, ParseExpr()); }  // ','
+      }
+      Advance();                            // ')'
+      return MakeCall(t.name, args);
+    }
+    return MakeVar(t.name);
+  }
+  if (t.kind == 91) {                       // array literal:  [ e1, e2, ... ]
+    Advance();
+    U0[] elems = [];
+    if (PeekKind() != 93) {
+      Append(elems, ParseExpr());
+      while (PeekKind() == 44) { Advance(); Append(elems, ParseExpr()); }
+    }
+    Advance();                              // ']'
+    return MakeArray(elems);
+  }
+  if (t.kind == 40)  { Advance(); Node e = ParseExpr(); Advance(); return e; } // ( )
+  if (t.kind == 45)  { Advance(); return MakeNeg(ParseFactor()); }             // unary -
+  return MakeNum(0);
+}
+
+Node ParseFactor()
+{
+  Node base = ParsePrimary();
+  while (PeekKind() == 91 || PeekKind() == 46) {   // postfix [idx] or .field
+    if (PeekKind() == 91) {
+      Advance();
+      Node idx = ParseExpr();
+      Advance();                             // ']'
+      base = MakeIndex(base, idx);
+    } else {
+      Advance();                             // '.'
+      U8 field = toks[pos].name;
+      Advance();                             // field / method name
+      if (PeekKind() == 40) {                // method call:  obj.m ( args )
+        Advance();                           // '('
+        U0[] args = [];
+        if (PeekKind() != 41) {
+          Append(args, ParseExpr());
+          while (PeekKind() == 44) { Advance(); Append(args, ParseExpr()); }  // ','
+        }
+        Advance();                           // ')'
+        base = MakeInvoke(base, field, args);
+      } else {
+        base = MakeField(base, field);
+      }
+    }
+  }
+  return base;
+}
+
+Node ParseTerm()
+{
+  Node left = ParseFactor();
+  while (PeekKind() == 42 || PeekKind() == 47 || PeekKind() == 37) {  // * / %
+    I64 op = PeekKind();
+    Advance();
+    left = MakeBin(op, left, ParseFactor());
+  }
+  return left;
+}
+
+Node ParseAdd()
+{
+  Node left = ParseTerm();
+  while (PeekKind() == 43 || PeekKind() == 45) {  // + -
+    I64 op = PeekKind();
+    Advance();
+    left = MakeBin(op, left, ParseTerm());
+  }
+  return left;
+}
+
+Node ParseExpr()
+{
+  Node left = ParseAdd();
+  while (IsCompare(PeekKind())) {  // comparisons (lowest precedence)
+    I64 op = PeekKind();
+    Advance();
+    left = MakeBin(op, left, ParseAdd());
+  }
+  return left;
+}
+
+Stmt ParseStmt();   // forward declaration
+
+U0[] ParseBlock()
+{
+  Advance();                       // consume '{'
+  U0[] body = [];
+  while (PeekKind() != 125 && PeekKind() != 0) Append(body, ParseStmt());
+  Advance();                       // consume '}'
+  return body;
+}
+
+// Parse a parenthesised parameter list `( [type] name, ... )` (the leading '('
+// is the current token) into a list of parameter names. Optional HolyC-style
+// type prefixes (with an optional `[]`) are consumed and discarded, so both
+// `(a, b)` and `(I64 a, U8[] b)` are accepted.
+U0[] ParseParamList()
+{
+  Advance();                               // '('
+  U0[] params = [];
+  if (PeekKind() != 41) {
+    if (IsTypeName(toks[pos].name)) { Advance(); if (PeekKind() == 91) { Advance(); Advance(); } }
+    Append(params, toks[pos].name); Advance();
+    while (PeekKind() == 44) {
+      Advance();
+      if (IsTypeName(toks[pos].name)) { Advance(); if (PeekKind() == 91) { Advance(); Advance(); } }
+      Append(params, toks[pos].name); Advance();
+    }
+  }
+  Advance();                               // ')'
+  return params;
+}
+
+// Parse an assignment with no trailing `;` (used for a `for` loop's increment
+// clause, which is terminated by `)`). Mirrors the assignment dispatch in
+// ParseStmt: a variable, field, or index target.
+Stmt ParseAssignNoSemi()
+{
+  Node lhs = ParseExpr();
+  Advance();                               // '='
+  Node rhs = ParseExpr();
+  if (lhs.op == 257) return Stmt(0, lhs.name, rhs, NULL, NULL, NULL, NULL);  // variable
+  if (lhs.op == 303) return Stmt(8, NULL, lhs, NULL, NULL, NULL, rhs);       // field target
+  return Stmt(6, NULL, lhs, NULL, NULL, NULL, rhs);                          // index target
+}
+
+Stmt ParseStmt()
+{
+  if (PeekKind() == 262) {                 // func name ( params ) block
+    Advance();
+    U8 fname = toks[pos].name;
+    Advance();                             // name
+    Advance();                             // '('
+    U0[] params = [];
+    if (PeekKind() != 41) {
+      Append(params, toks[pos].name); Advance();
+      while (PeekKind() == 44) { Advance(); Append(params, toks[pos].name); Advance(); }
+    }
+    Advance();                             // ')'
+    U0[] body = ParseBlock();
+    return Stmt(5, fname, NULL, body, NULL, params);
+  }
+  if (PeekKind() == 263) {                 // return expr ;
+    Advance();
+    Node e = ParseExpr();
+    Advance();                             // ';'
+    return Stmt(4, NULL, e, NULL, NULL, NULL);
+  }
+  if (PeekKind() == 265) {                 // class Name { fields + methods }
+    Advance();
+    U8 cname = toks[pos].name;
+    Advance();                             // class name
+    Advance();                             // '{'
+    U0[] fieldNames = [];
+    U0[] methods = [];
+    // A member is either a field `[Type] name;` or a method
+    // `[Type | "func"] name(params) block`. The `(` after the name decides.
+    while (PeekKind() != 125 && PeekKind() != 0) {
+      if (PeekKind() == 262) Advance();    // `func` method prefix
+      else if (IsTypeName(toks[pos].name)) {  // optional type prefix
+        Advance();
+        if (PeekKind() == 91) { Advance(); Advance(); }   // `[]`
+      }
+      U8 mname = toks[pos].name;            // member name
+      Advance();
+      if (PeekKind() == 40) {               // method: name ( params ) block
+        U0[] params = ParseParamList();
+        U0[] body = ParseBlock();
+        Append(methods, Stmt(5, mname, NULL, body, NULL, params, NULL));
+      } else {
+        Append(fieldNames, mname);          // field name
+        Advance();                          // ';'
+      }
+    }
+    Advance();                             // '}'
+    return Stmt(9, cname, NULL, methods, NULL, fieldNames, NULL);
+  }
+  if (PeekKind() == 259) {                 // if ( cond ) block [else block]
+    Advance();
+    Advance();                             // '('
+    Node cond = ParseExpr();
+    Advance();                             // ')'
+    U0[] thenB = ParseBlock();
+    U0[] elseB = NULL;
+    if (PeekKind() == 260) { Advance(); elseB = ParseBlock(); }
+    return Stmt(2, NULL, cond, thenB, elseB, NULL);
+  }
+  if (PeekKind() == 261) {                 // while ( cond ) block
+    Advance();
+    Advance();                             // '('
+    Node cond = ParseExpr();
+    Advance();                             // ')'
+    U0[] body = ParseBlock();
+    return Stmt(3, NULL, cond, body, NULL, NULL);
+  }
+  if (PeekKind() == 267) {                 // for ( init ; cond ; incr ) block
+    Advance();
+    Advance();                             // '('
+    Stmt init = ParseStmt();               // declaration/assignment + ';'
+    Node cond = ParseExpr();
+    Advance();                             // ';'
+    Stmt incr = ParseAssignNoSemi();
+    Advance();                             // ')'
+    U0[] body = ParseBlock();
+    U0[] initL = []; Append(initL, init);
+    U0[] incrL = []; Append(incrL, incr);
+    return Stmt(10, NULL, cond, body, initL, incrL, NULL);
+  }
+  if (PeekKind() == 268) {                 // do block while ( cond ) ;
+    Advance();
+    U0[] body = ParseBlock();
+    Advance();                             // 'while'
+    Advance();                             // '('
+    Node cond = ParseExpr();
+    Advance();                             // ')'
+    Advance();                             // ';'
+    return Stmt(11, NULL, cond, body, NULL, NULL, NULL);
+  }
+  if (PeekKind() == 258) {                 // print expr ;
+    Advance();
+    Node e = ParseExpr();
+    Advance();                             // ';'
+    return Stmt(1, NULL, e, NULL, NULL, NULL);
+  }
+  // HolyC-style typed declaration: a type keyword (optionally with `[]`)
+  // followed by a name introduces a typed variable (`I64 x = expr;`, `U0[] a =
+  // ...;`, or `I64 x;` defaulting to 0) or a typed function
+  // (`U0 f(I64 a, U8 b) { ... }`). The types are parsed and discarded.
+  if (PeekKind() == 257 && IsTypeName(toks[pos].name) &&
+      (toks[pos + 1].kind == 257 || toks[pos + 1].kind == 91)) {
+    Advance();                              // return / variable type
+    if (PeekKind() == 91) { Advance(); Advance(); }  // optional `[]` array type
+    U8 nm = toks[pos].name;
+    Advance();                              // name
+    if (PeekKind() == 40) {                 // typed function
+      Advance();                            // '('
+      U0[] params = [];
+      if (PeekKind() != 41) {
+        if (IsTypeName(toks[pos].name)) { Advance(); if (PeekKind() == 91) { Advance(); Advance(); } }
+        Append(params, toks[pos].name); Advance();
+        while (PeekKind() == 44) {
+          Advance();
+          if (IsTypeName(toks[pos].name)) { Advance(); if (PeekKind() == 91) { Advance(); Advance(); } }
+          Append(params, toks[pos].name); Advance();
+        }
+      }
+      Advance();                            // ')'
+      U0[] body = ParseBlock();
+      return Stmt(5, nm, NULL, body, NULL, params, NULL);
+    }
+    if (PeekKind() == 61) {                 // typed var with initializer
+      Advance();                            // '='
+      Node e = ParseExpr();
+      Advance();                            // ';'
+      return Stmt(0, nm, e, NULL, NULL, NULL, NULL);
+    }
+    Advance();                              // ';'  — `Type name;` defaults to 0
+    return Stmt(0, nm, MakeNum(0), NULL, NULL, NULL, NULL);
+  }
+
+  // Assignment or expression statement. Parse an expression; if '=' follows it
+  // was an lvalue (a variable or an index target), otherwise it is a bare
+  // expression statement (e.g. a call whose result is discarded).
+  Node lhs = ParseExpr();
+  if (PeekKind() == 61) {                   // '=' assignment
+    Advance();
+    Node rhs = ParseExpr();
+    Advance();                              // ';'
+    if (lhs.op == 257) return Stmt(0, lhs.name, rhs, NULL, NULL, NULL, NULL);  // variable
+    if (lhs.op == 303) return Stmt(8, NULL, lhs, NULL, NULL, NULL, rhs);       // field target
+    return Stmt(6, NULL, lhs, NULL, NULL, NULL, rhs);                          // index target
+  }
+  Advance();                                // ';'
+  return Stmt(7, NULL, lhs, NULL, NULL, NULL, NULL);                           // expression stmt
+}
+
+U0[] Parse(U8 src)
+{
+  toks = Tokenize(src);
+  pos = 0;
+  U0[] stmts = [];
+  while (PeekKind() != 0) Append(stmts, ParseStmt());
+  return stmts;
+}
+

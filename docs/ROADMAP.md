@@ -407,13 +407,23 @@ Can brokm compile itself? Eventually, yes — and brokm now hosts the front-end 
   the class's method table). `tests/cases/selfhost10.bk` mutates fields through `this`, calls sibling
   methods (`this.Inc()`), passes an instance to a method, and relies on reference semantics —
   byte-identical four ways (with `AddMethod` exercised under GC stress).
+- **Step 13 — `for` / `do`-`while` loops ✅.** `examples/realcc.bk` rounds out its control flow with
+  C-style `for (init; cond; incr) { ... }` (init runs once, increment after each body; loop variables
+  declared in the init are collected as function-scoped locals) and `do { ... } while (cond);` (body
+  runs at least once). Zero C changes — both reuse the existing jump/loop opcodes, desugaring to the
+  same init-then-conditional-loop shape. With the file now past the 800-line guideline, the compiler
+  was **split into modules** — `realcc_types.bk` / `realcc_lex.bk` / `realcc_parse.bk` /
+  `realcc_gen.bk`, stitched together by `realcc.bk` via `#include` (dogfooding v0.10 modules); every
+  test and demo that includes `realcc.bk` picks them up transitively. `tests/cases/selfhost11.bk`
+  covers top-level, in-function, and nested `for` loops plus a `do`-`while` — byte-identical four ways.
 - **Path:** lexer ✅ → parser/AST ✅ → code generator ✅ → real bytecode ✅ → control flow ✅ →
-  functions ✅ → locals ✅ → arrays ✅ → strings ✅ → types + maps ✅ → structs ✅ → methods ✅. The
-  in-brokm compiler is now a real, small language back-end covering values, control flow, functions,
-  aggregates, strings, maps, and user-defined types with methods — its surface syntax substantially
-  overlaps brokm's. Remaining gaps before it could compile brokm itself: `for`/`switch` and matching
-  brokm's exact grammar (e.g. `"...";` print statements). Then — much later — a runtime in brokm,
-  retiring the C bootstrap. The baseline JIT matters here: a self-hosted compiler is compute-heavy.
+  functions ✅ → locals ✅ → arrays ✅ → strings ✅ → types + maps ✅ → structs ✅ → methods ✅ →
+  `for`/`do`-`while` ✅. The in-brokm compiler is now a real, small language back-end covering values,
+  control flow, functions, aggregates, strings, maps, and user-defined types with methods — its
+  surface syntax substantially overlaps brokm's. Remaining gaps before it could compile brokm itself:
+  `switch` and matching brokm's exact grammar (e.g. `"...";` print statements). Then — much later — a
+  runtime in brokm, retiring the C bootstrap. The baseline JIT matters here: a self-hosted compiler is
+  compute-heavy.
 
 ## Language features tracked across milestones
 

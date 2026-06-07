@@ -138,3 +138,23 @@ U0 methodProg = Compile("
   Print(\"balance = \"); print acct.Balance();
 ");
 methodProg();                                           // counter = 3 / balance = 120
+
+// Loops (step 13): `for` (at top level and inside a function) and `do`-`while`.
+U0 loopProg = Compile("
+  Print(\"-- loops --\n\");
+  sum = 0;
+  for (i = 1; i <= 10; i = i + 1) { sum = sum + i; }
+  Print(\"sum 1..10 = \"); print sum;
+
+  func power(base, exp) {
+    result = 1;
+    for (e = 0; e < exp; e = e + 1) { result = result * base; }
+    return result;
+  }
+  Print(\"2^10 = \"); print power(2, 10);
+
+  n = 1; count = 0;
+  do { count = count + 1; n = n * 2; } while (n < 1000);
+  Print(\"doublings to 1000 = \"); print count;
+");
+loopProg();                                             // sum 1..10 = 55 / 2^10 = 1024 / doublings = 10

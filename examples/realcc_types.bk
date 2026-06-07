@@ -1,0 +1,37 @@
+// realcc_types.bk — token, AST node, and statement types for the realcc
+// self-hosting compiler, plus the character-class helpers used by the lexer.
+// Part of realcc.bk (see its header for the whole picture); included first so
+// the Tok / Node / Stmt classes are available to every other module.
+
+// ---- AST / token types -----------------------------------------------------
+// Tok.kind: 256 number, 257 ident, 258 print, 259 if, 260 else, 261 while,
+//   262 func, 263 return, 264 string (value in `name`), 265 class, 266 NULL,
+//   267 for, 268 do, 0 EOF,
+//   two-char ops 280 `==` 281 `!=` 282 `<=` 283 `>=`, else op char code.
+class Tok  { I64 kind; I64 val; U8 name; }
+// Node.op: 256 number, 257 variable, 264 string, 110 negate, 300 call,
+//   301 array literal, 302 index (left[right]), 303 field (left.name),
+//   304 method call (left.name(args)), else binary op code. For a call, `name`
+//   is the callee and `args` the argument Nodes; for an array literal, `args`
+//   holds the elements; for a string, `name` is the value; for a field, `left`
+//   is the object and `name` the field; for a method call, `left` is the
+//   receiver, `name` the method, and `args` the arguments.
+class Node { I64 op; I64 val; U8 name; Node left; Node right; U0[] args; }
+// Stmt.kind: 0 assign, 1 print, 2 if, 3 while, 4 return, 5 func, 6 index-set
+//   (expr = target index node, expr2 = value), 7 expression statement,
+//   8 field-set (expr = target field node, expr2 = value), 9 class declaration
+//   (name = class name, params = field-name list, thenB = method func Stmts),
+//   10 for (expr = cond, thenB = body, elseB = [init Stmt], params = [incr Stmt]),
+//   11 do-while (expr = cond, thenB = body).
+//   thenB/elseB hold Stmt lists; params holds a func's parameter names or a
+//   class's field names.
+class Stmt { I64 kind; U8 name; Node expr; U0[] thenB; U0[] elseB; U0[] params; Node expr2; }
+
+// ---- character classes -----------------------------------------------------
+I64 IsSpace(I64 c) { return c == 32 || c == 9 || c == 10 || c == 13; }
+I64 IsDigit(I64 c) { return c >= 48 && c <= 57; }
+I64 IsAlpha(I64 c) {
+  return (c >= 97 && c <= 122) || (c >= 65 && c <= 90) || c == 95;
+}
+I64 IsAlnum(I64 c) { return IsAlpha(c) || IsDigit(c); }
+

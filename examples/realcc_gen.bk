@@ -1,0 +1,367 @@
+// realcc_gen.bk — the code generator for the realcc self-hosting compiler:
+// walks the Stmt/Node trees and emits brokm's REAL bytecode, packing each
+// function and method into a callable ObjFunction via the Opcode/Assemble/
+// AddMethod natives. Ends with Compile(src), the entry point. Part of realcc.bk.
+
+// ---- real opcode numbers (chunk.h enum is the source of truth) -------------
+I64 ROP_CONSTANT      = Opcode("CONSTANT");
+I64 ROP_DEFINE_GLOBAL = Opcode("DEFINE_GLOBAL");
+I64 ROP_GET_GLOBAL    = Opcode("GET_GLOBAL");
+I64 ROP_GET_LOCAL     = Opcode("GET_LOCAL");
+I64 ROP_SET_LOCAL     = Opcode("SET_LOCAL");
+I64 ROP_ADD           = Opcode("ADD");
+I64 ROP_SUB           = Opcode("SUB");
+I64 ROP_MUL           = Opcode("MUL");
+I64 ROP_DIV           = Opcode("DIV");
+I64 ROP_MOD           = Opcode("MOD");
+I64 ROP_NEGATE        = Opcode("NEGATE");
+I64 ROP_LESS          = Opcode("LESS");
+I64 ROP_GREATER       = Opcode("GREATER");
+I64 ROP_LESS_EQUAL    = Opcode("LESS_EQUAL");
+I64 ROP_GREATER_EQUAL = Opcode("GREATER_EQUAL");
+I64 ROP_EQUAL         = Opcode("EQUAL");
+I64 ROP_NOT_EQUAL     = Opcode("NOT_EQUAL");
+I64 ROP_PRINT         = Opcode("PRINT");
+I64 ROP_POP           = Opcode("POP");
+I64 ROP_CALL          = Opcode("CALL");
+I64 ROP_ARRAY         = Opcode("ARRAY");
+I64 ROP_INDEX_GET     = Opcode("INDEX_GET");
+I64 ROP_INDEX_SET     = Opcode("INDEX_SET");
+I64 ROP_GET_FIELD     = Opcode("GET_FIELD");
+I64 ROP_SET_FIELD     = Opcode("SET_FIELD");
+I64 ROP_INVOKE        = Opcode("INVOKE");
+I64 ROP_JUMP          = Opcode("JUMP");
+I64 ROP_JUMP_IF_FALSE = Opcode("JUMP_IF_FALSE");
+I64 ROP_LOOP          = Opcode("LOOP");
+I64 ROP_NIL           = Opcode("NIL");
+I64 ROP_RETURN        = Opcode("RETURN");
+
+// ---- emit buffers + helpers ------------------------------------------------
+// rcode/rconsts are the chunk being built; curLocals is the local-name list of
+// the function currently being compiled (parameters first, then any variable
+// assigned in the body), or NULL at top level where variables are globals.
+// GenFunction saves and restores all three so nested functions compile into
+// their own chunks.
+U0[] rcode    = [];
+U0[] rconsts  = [];
+U0[] curLocals = NULL;
+
+I64 AddConst(U0 v)           { I64 i = Len(rconsts); Append(rconsts, v); return i; }
+U0  Emit(I64 op)             { Append(rcode, op); }
+U0  EmitArg(I64 op, I64 arg) { Append(rcode, op); Append(rcode, arg); }
+
+I64 Contains(U0[] names, U8 name)
+{
+  if (names == NULL) return 0;
+  I64 i = 0;
+  while (i < Len(names)) {
+    if (names[i] == name) return 1;
+    i = i + 1;
+  }
+  return 0;
+}
+
+// Local slot for `name` (1..localCount), or -1 if it is not a local (and so
+// resolves to a global). Slot 0 is the function itself; parameters occupy the
+// first slots, additional locals follow.
+I64 LocalSlot(U8 name)
+{
+  if (curLocals == NULL) return -1;
+  // Inside a method, the receiver lives in slot 0 and is named `this` (mirrors
+  // the C compiler). Ordinary functions never reference `this`.
+  if (name == "this") return 0;
+  I64 i = 0;
+  while (i < Len(curLocals)) {
+    if (curLocals[i] == name) return i + 1;
+    i = i + 1;
+  }
+  return -1;
+}
+
+// Emit a jump with a placeholder 16-bit operand; return the operand's index so
+// it can be patched once the target is known (mirrors the C compiler).
+I64 EmitJump(I64 op)
+{
+  Append(rcode, op);
+  Append(rcode, 255);
+  Append(rcode, 255);
+  return Len(rcode) - 2;
+}
+
+// Backpatch the forward jump whose operand starts at `at` to land here.
+U0 PatchJump(I64 at)
+{
+  I64 jump = Len(rcode) - at - 2;
+  rcode[at]     = (jump >> 8) & 255;
+  rcode[at + 1] = jump & 255;
+}
+
+// Emit a backward LOOP to `loopStart` (big-endian, as the C compiler emits it).
+U0 EmitLoop(I64 loopStart)
+{
+  Append(rcode, ROP_LOOP);
+  I64 offset = Len(rcode) - loopStart + 2;
+  Append(rcode, (offset >> 8) & 255);
+  Append(rcode, offset & 255);
+}
+
+I64 BinOpcode(I64 c)
+{
+  if (c == 43)  return ROP_ADD;
+  if (c == 45)  return ROP_SUB;
+  if (c == 42)  return ROP_MUL;
+  if (c == 47)  return ROP_DIV;
+  if (c == 37)  return ROP_MOD;
+  if (c == 60)  return ROP_LESS;
+  if (c == 62)  return ROP_GREATER;
+  if (c == 282) return ROP_LESS_EQUAL;
+  if (c == 283) return ROP_GREATER_EQUAL;
+  if (c == 280) return ROP_EQUAL;
+  return ROP_NOT_EQUAL;            // 281 `!=`
+}
+
+// ---- code generation -------------------------------------------------------
+U0 GenExpr(Node n)
+{
+  if (n.op == 256) { EmitArg(ROP_CONSTANT, AddConst(n.val)); return; }
+  if (n.op == 305) { Emit(ROP_NIL); return; }                           // NULL
+  if (n.op == 264) { EmitArg(ROP_CONSTANT, AddConst(n.name)); return; }  // string
+  if (n.op == 257) {                          // variable: local or global
+    I64 slot = LocalSlot(n.name);
+    if (slot >= 0) EmitArg(ROP_GET_LOCAL, slot);
+    else           EmitArg(ROP_GET_GLOBAL, AddConst(n.name));
+    return;
+  }
+  if (n.op == 110) { GenExpr(n.left); Emit(ROP_NEGATE); return; }
+  if (n.op == 300) {                          // call: push callee, args, OP_CALL
+    EmitArg(ROP_GET_GLOBAL, AddConst(n.name));
+    I64 i = 0;
+    while (i < Len(n.args)) { GenExpr(n.args[i]); i = i + 1; }
+    EmitArg(ROP_CALL, Len(n.args));
+    return;
+  }
+  if (n.op == 301) {                          // array literal: elements, OP_ARRAY
+    I64 i = 0;
+    while (i < Len(n.args)) { GenExpr(n.args[i]); i = i + 1; }
+    EmitArg(ROP_ARRAY, Len(n.args));
+    return;
+  }
+  if (n.op == 302) {                          // index get: array, index, INDEX_GET
+    GenExpr(n.left);
+    GenExpr(n.right);
+    Emit(ROP_INDEX_GET);
+    return;
+  }
+  if (n.op == 303) {                          // field get: object, GET_FIELD name
+    GenExpr(n.left);
+    EmitArg(ROP_GET_FIELD, AddConst(n.name));
+    return;
+  }
+  if (n.op == 304) {                          // method call: recv, args, INVOKE
+    GenExpr(n.left);                          // receiver -> slot 0 (`this`)
+    I64 i = 0;
+    while (i < Len(n.args)) { GenExpr(n.args[i]); i = i + 1; }
+    Emit(ROP_INVOKE);
+    Append(rcode, AddConst(n.name));          // method-name constant
+    Append(rcode, Len(n.args));               // argument count
+    return;
+  }
+  GenExpr(n.left);
+  GenExpr(n.right);
+  Emit(BinOpcode(n.op));
+}
+
+U0 GenStmts(U0[] stmts);   // forward declaration
+U0 GenFunction(Stmt fn);   // forward declaration
+
+U0 GenStmt(Stmt s)
+{
+  if (s.kind == 0) {                          // name = expr
+    GenExpr(s.expr);
+    I64 slot = LocalSlot(s.name);
+    if (slot >= 0) { EmitArg(ROP_SET_LOCAL, slot); Emit(ROP_POP); } // SET_LOCAL leaves value
+    else           EmitArg(ROP_DEFINE_GLOBAL, AddConst(s.name));
+    return;
+  }
+  if (s.kind == 1) {                          // print expr
+    EmitArg(ROP_CONSTANT, AddConst("%d\n"));
+    GenExpr(s.expr);
+    EmitArg(ROP_PRINT, 2);
+    return;
+  }
+  if (s.kind == 2) {                          // if (cond) then [else]
+    GenExpr(s.expr);
+    I64 thenJump = EmitJump(ROP_JUMP_IF_FALSE);
+    Emit(ROP_POP);                            // condition true: discard it
+    GenStmts(s.thenB);
+    I64 elseJump = EmitJump(ROP_JUMP);
+    PatchJump(thenJump);
+    Emit(ROP_POP);                            // condition false: discard it
+    if (s.elseB != NULL) GenStmts(s.elseB);
+    PatchJump(elseJump);
+    return;
+  }
+  if (s.kind == 3) {                          // while (cond) body
+    I64 loopStart = Len(rcode);
+    GenExpr(s.expr);
+    I64 exitJump = EmitJump(ROP_JUMP_IF_FALSE);
+    Emit(ROP_POP);                            // entering loop: discard cond
+    GenStmts(s.thenB);
+    EmitLoop(loopStart);
+    PatchJump(exitJump);
+    Emit(ROP_POP);                            // loop exited: discard cond
+    return;
+  }
+  if (s.kind == 10) {                         // for (init; cond; incr) body
+    GenStmt(s.elseB[0]);                       // init, runs once
+    I64 loopStart = Len(rcode);
+    GenExpr(s.expr);                           // cond
+    I64 exitJump = EmitJump(ROP_JUMP_IF_FALSE);
+    Emit(ROP_POP);                            // entering loop: discard cond
+    GenStmts(s.thenB);                        // body
+    GenStmt(s.params[0]);                      // increment
+    EmitLoop(loopStart);
+    PatchJump(exitJump);
+    Emit(ROP_POP);                            // loop exited: discard cond
+    return;
+  }
+  if (s.kind == 11) {                         // do body while (cond)
+    I64 loopStart = Len(rcode);
+    GenStmts(s.thenB);                        // body runs at least once
+    GenExpr(s.expr);                           // cond
+    I64 exitJump = EmitJump(ROP_JUMP_IF_FALSE);
+    Emit(ROP_POP);                            // continue: discard cond
+    EmitLoop(loopStart);
+    PatchJump(exitJump);
+    Emit(ROP_POP);                            // loop exited: discard cond
+    return;
+  }
+  if (s.kind == 4) {                          // return expr
+    GenExpr(s.expr);
+    Emit(ROP_RETURN);
+    return;
+  }
+  if (s.kind == 6) {                          // target[index] = value
+    GenExpr(s.expr.left);                     // array
+    GenExpr(s.expr.right);                    // index
+    GenExpr(s.expr2);                         // value
+    Emit(ROP_INDEX_SET);
+    Emit(ROP_POP);                            // INDEX_SET leaves the value
+    return;
+  }
+  if (s.kind == 7) {                          // expression statement: discard result
+    GenExpr(s.expr);
+    Emit(ROP_POP);
+    return;
+  }
+  if (s.kind == 8) {                          // object.field = value
+    GenExpr(s.expr.left);                     // object
+    GenExpr(s.expr2);                         // value
+    EmitArg(ROP_SET_FIELD, AddConst(s.expr.name));
+    Emit(ROP_POP);                            // SET_FIELD leaves the value
+    return;
+  }
+  if (s.kind == 9) {                          // class declaration -> MakeClass + bind
+    U0 klass = MakeClass(s.name, s.params);
+    I64 i = 0;
+    while (i < Len(s.thenB)) {                 // attach each method to the class
+      Stmt m = s.thenB[i];
+      U0 fnval = GenFunction(m);
+      AddMethod(klass, m.name, fnval);
+      i = i + 1;
+    }
+    EmitArg(ROP_CONSTANT, AddConst(klass));
+    EmitArg(ROP_DEFINE_GLOBAL, AddConst(s.name));
+    return;
+  }
+  // s.kind == 5: func definition -> assemble its own chunk, bind as a global
+  U0 fnval = GenFunction(s);
+  EmitArg(ROP_CONSTANT, AddConst(fnval));
+  EmitArg(ROP_DEFINE_GLOBAL, AddConst(s.name));
+}
+
+U0 GenStmts(U0[] stmts)
+{
+  I64 i = 0;
+  while (i < Len(stmts)) {
+    GenStmt(stmts[i]);
+    i = i + 1;
+  }
+}
+
+// Collect the names assigned anywhere in a statement list (recursing into if /
+// while / for / do-while bodies and a for loop's init and increment, but not
+// into nested function definitions) that are not already known, appending them
+// to `locals`. These become hoisted function-scoped locals, so control flow
+// can't leave a slot uninitialized.
+U0 CollectLocals(U0[] stmts, U0[] locals)
+{
+  I64 i = 0;
+  while (i < Len(stmts)) {
+    Stmt s = stmts[i];
+    if (s.kind == 0) {                                  // assignment target
+      if (!Contains(locals, s.name)) Append(locals, s.name);
+    } else if (s.kind == 2) {                           // if: then + else
+      CollectLocals(s.thenB, locals);
+      if (s.elseB != NULL) CollectLocals(s.elseB, locals);
+    } else if (s.kind == 3) {                           // while: body
+      CollectLocals(s.thenB, locals);
+    } else if (s.kind == 10) {                          // for: init, body, incr
+      CollectLocals(s.elseB, locals);
+      CollectLocals(s.thenB, locals);
+      CollectLocals(s.params, locals);
+    } else if (s.kind == 11) {                          // do-while: body
+      CollectLocals(s.thenB, locals);
+    }
+    i = i + 1;
+  }
+}
+
+// Compile a function body into its own real ObjFunction value. Locals are the
+// parameters followed by every other assigned name, all addressed by slot;
+// non-parameter locals are reserved at entry with a nil push so their stack
+// slots exist regardless of control flow. The current chunk buffers and local
+// scope are saved and restored, so this is reentrant for sibling functions.
+U0 GenFunction(Stmt fn)
+{
+  U0[] savedCode   = rcode;
+  U0[] savedConsts = rconsts;
+  U0[] savedLocals = curLocals;
+
+  rcode   = [];
+  rconsts = [];
+  I64 arity = Len(fn.params);
+  U0[] locals = [];
+  I64 i = 0;
+  while (i < arity) { Append(locals, fn.params[i]); i = i + 1; }
+  CollectLocals(fn.thenB, locals);   // params first, then body-assigned names
+  curLocals = locals;
+
+  I64 extra = Len(locals) - arity;   // reserve a slot per non-parameter local
+  i = 0;
+  while (i < extra) { Emit(ROP_NIL); i = i + 1; }
+
+  GenStmts(fn.thenB);
+  Emit(ROP_NIL);                     // implicit `return 0` if control falls off
+  Emit(ROP_RETURN);
+  U0 fnval = Assemble(rcode, rconsts, arity);
+
+  rcode     = savedCode;
+  rconsts   = savedConsts;
+  curLocals = savedLocals;
+  return fnval;
+}
+
+// Compile source text into a callable function (the top-level script) that runs
+// on the C VM.
+U0 Compile(U8 src)
+{
+  U0[] stmts = Parse(src);
+  rcode     = [];
+  rconsts   = [];
+  curLocals = NULL;
+  GenStmts(stmts);
+  Emit(ROP_NIL);
+  Emit(ROP_RETURN);
+  return Assemble(rcode, rconsts);
+}
