@@ -120,6 +120,7 @@
       <div class="card"><h3>Static type checker</h3><p>Validates HolyC type annotations before execution; gradual, so existing code is unaffected.</p></div>
       <div class="card"><h3>Baseline JIT</h3><p>Profile-gated arm64 + x86-64 code generation for hot functions, ~2× faster on recursion, with a full interpreter fallback.</p></div>
       <div class="card"><h3>Standard library</h3><p>File I/O, string ops, and math builtins — enough to write a brokm tokenizer in brokm.</p></div>
+      <div class="card"><h3>Self-hosting</h3><p>A compiler written in brokm (<span class="mono">realcc.bk</span>) emits the VM's real bytecode and compiles its own source — byte-identical to the C compiler.</p></div>
     </div>
   </div>
 </section>
