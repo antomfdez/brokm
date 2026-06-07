@@ -1,0 +1,29 @@
+// Self-hosting step 22 — TRUE BOOTSTRAP. realcc compiles its own complete source
+// (all four modules), the result is run to rebind Compile/Parse/Tokenize/... as
+// brokm-compiled functions, and that SELF-COMPILED compiler then compiles a
+// program of its own. Unlocked by deduplicating realcc's constant pool: a chunk's
+// constant operand is a single byte, and a big function like ParseStmt blew past
+// 256 distinct constants, silently wrapping the index and reading wrong constants.
+#include "../../examples/realcc.bk"
+
+// Stage 1: the C-hosted realcc compiles realcc's full source. realcc's lexer has
+// no #include, so the modules are concatenated by joining their text.
+U8 rsrc = ReadFile("examples/realcc_types.bk") + ReadFile("examples/realcc_lex.bk")
+        + ReadFile("examples/realcc_parse.bk") + ReadFile("examples/realcc_gen.bk");
+Compile(rsrc)();
+
+// Stage 2: the self-compiled compiler compiles a deterministic program covering
+// recursion, a loop, and a class with field access.
+Compile("
+  func Fib(n) { if (n < 2) { return n; } return Fib(n - 1) + Fib(n - 2); }
+  \"fib(10) = %d\n\", Fib(10);
+
+  I64 s = 0;
+  I64 i = 1;
+  while (i <= 100) { s = s + i; i = i + 1; }
+  \"sum = %d\n\", s;
+
+  class Pt { I64 x; I64 y; }
+  U0 p = Pt(3, 4);
+  \"pt = %d, %d\n\", p.x, p.y;
+")();

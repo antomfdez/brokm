@@ -1,0 +1,16 @@
+// bootstrap.bk — the full self-hosting bootstrap. The C-hosted in-brokm compiler
+// (examples/realcc.bk) compiles realcc's OWN complete source, runs the result so
+// that Compile/Parse/Tokenize/... are rebound to those brokm-compiled functions,
+// then uses that self-compiled compiler to compile and run examples/sample.bk.
+//
+// Its output must match running sample.bk through the C compiler — see
+// `make test-bootstrap`. realcc's lexer has no #include, so the four modules are
+// concatenated here (in dependency order) by reading and joining their text.
+#include "realcc.bk"
+
+U8 rsrc = ReadFile("examples/realcc_types.bk") + ReadFile("examples/realcc_lex.bk")
+        + ReadFile("examples/realcc_parse.bk") + ReadFile("examples/realcc_gen.bk");
+Compile(rsrc)();                              // stage 1: realcc compiles realcc
+
+U8 ssrc = ReadFile("examples/sample.bk");
+Compile(ssrc)();                              // stage 2: self-compiled realcc runs

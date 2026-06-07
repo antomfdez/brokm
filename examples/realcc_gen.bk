@@ -63,7 +63,23 @@ U0[] swBreaks = NULL;
 // introduces a local. Populated per compilation in Compile.
 U0[] globalNames = [];
 
-I64 AddConst(U0 v)           { I64 i = Len(rconsts); Append(rconsts, v); return i; }
+// Add a constant to the current chunk's pool, reusing an identical existing one.
+// The chunk's constant operand is a single byte, so a function with more than
+// 256 DISTINCT constants would overflow it (silently reading the wrong constant);
+// deduplicating keeps repeated names/numbers/strings to one slot, exactly as the
+// C compiler's make_constant does. Safe because realcc's constants are only ints,
+// interned strings, and object values (functions/classes compared by identity) —
+// there are no floats to confuse with equal-valued ints.
+I64 AddConst(U0 v)
+{
+  I64 i = 0;
+  while (i < Len(rconsts)) {
+    if (rconsts[i] == v) return i;
+    i = i + 1;
+  }
+  Append(rconsts, v);
+  return Len(rconsts) - 1;
+}
 U0  Emit(I64 op)             { Append(rcode, op); }
 U0  EmitArg(I64 op, I64 arg) { Append(rcode, op); Append(rcode, arg); }
 

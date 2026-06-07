@@ -9,7 +9,7 @@ SRC := $(wildcard src/*.c)
 OBJ := $(SRC:.c=.o)
 BIN := brokm
 
-.PHONY: all debug test bench embed test-embed clean
+.PHONY: all debug test bench embed test-embed test-selfcompile test-bootstrap clean
 
 # Embedding demo: the library sources (minus the CLI main) + the host program.
 EMBED_SRC := $(filter-out src/main.c,$(SRC))
@@ -60,6 +60,18 @@ test-selfcompile: $(BIN)
 	  echo "selfcompile: OK (C compiler == in-brokm compiler)"; \
 	else \
 	  echo "selfcompile: FAIL"; diff /tmp/brokm-direct.out /tmp/brokm-selfcc.out; exit 1; \
+	fi
+
+# Full bootstrap: realcc compiles its OWN source, and the self-compiled compiler
+# must produce the same output for sample.bk as the C compiler. (examples/sample.bk
+# run directly == the result of examples/bootstrap.bk, which two-stage self-hosts.)
+test-bootstrap: $(BIN)
+	@./brokm examples/sample.bk > /tmp/brokm-direct.out 2>&1; \
+	./brokm examples/bootstrap.bk > /tmp/brokm-boot.out 2>&1; \
+	if diff /tmp/brokm-direct.out /tmp/brokm-boot.out >/dev/null; then \
+	  echo "bootstrap: OK (C compiler == realcc-compiled realcc)"; \
+	else \
+	  echo "bootstrap: FAIL"; diff /tmp/brokm-direct.out /tmp/brokm-boot.out; exit 1; \
 	fi
 
 # Benchmark the JIT against the interpreter on a recursion-heavy program.
