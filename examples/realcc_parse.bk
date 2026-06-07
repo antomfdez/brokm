@@ -272,6 +272,10 @@ Stmt ParseStmt()
       while (PeekKind() == 44) { Advance(); Append(params, toks[pos].name); Advance(); }
     }
     Advance();                             // ')'
+    if (PeekKind() == 59) {                // prototype: `func name(params);`
+      Advance();                           // ';' — no body, nothing to emit
+      return Stmt(5, fname, NULL, NULL, NULL, params);
+    }
     U0[] body = ParseBlock();
     return Stmt(5, fname, NULL, body, NULL, params);
   }
@@ -311,14 +315,22 @@ Stmt ParseStmt()
     Advance();                             // '}'
     return Stmt(9, cname, NULL, methods, NULL, fieldNames, NULL);
   }
-  if (PeekKind() == 259) {                 // if ( cond ) block [else block]
+  if (PeekKind() == 259) {                 // if ( cond ) block [else (block | if)]
     Advance();
     Advance();                             // '('
     Node cond = ParseExpr();
     Advance();                             // ')'
     U0[] thenB = ParseBlock();
     U0[] elseB = NULL;
-    if (PeekKind() == 260) { Advance(); elseB = ParseBlock(); }
+    if (PeekKind() == 260) {               // else
+      Advance();
+      if (PeekKind() == 259) {             // `else if`: the else body is one if-stmt
+        elseB = [];
+        Append(elseB, ParseStmt());
+      } else {
+        elseB = ParseBlock();
+      }
+    }
     return Stmt(2, NULL, cond, thenB, elseB, NULL);
   }
   if (PeekKind() == 261) {                 // while ( cond ) block
@@ -421,6 +433,10 @@ Stmt ParseStmt()
         }
       }
       Advance();                            // ')'
+      if (PeekKind() == 59) {               // prototype: `Type name(params);`
+        Advance();                          // ';' — no body, nothing to emit
+        return Stmt(5, nm, NULL, NULL, NULL, params, NULL);
+      }
       U0[] body = ParseBlock();
       return Stmt(5, nm, NULL, body, NULL, params, NULL);
     }

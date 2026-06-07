@@ -321,7 +321,10 @@ U0 GenStmt(Stmt s)
     EmitArg(ROP_DEFINE_GLOBAL, AddConst(s.name));
     return;
   }
-  // s.kind == 5: func definition -> assemble its own chunk, bind as a global
+  // s.kind == 5: func definition -> assemble its own chunk, bind as a global.
+  // A prototype (no body, thenB == NULL) emits nothing; the real definition
+  // later binds the global, exactly as brokm treats forward declarations.
+  if (s.thenB == NULL) return;
   U0 fnval = GenFunction(s);
   EmitArg(ROP_CONSTANT, AddConst(fnval));
   EmitArg(ROP_DEFINE_GLOBAL, AddConst(s.name));

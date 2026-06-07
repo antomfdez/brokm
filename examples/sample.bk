@@ -39,6 +39,18 @@ U0 Classify(I64 d) {
   }
 }
 
+// Forward declaration (prototype): Grade is used by Sign before it is defined.
+U8 Grade(I64 score);
+
+U8 Sign(I64 score) { return Grade(score); }
+
+U8 Grade(I64 score) {
+  if (score >= 90) { return "A"; }
+  else if (score >= 80) { return "B"; }
+  else if (score >= 70) { return "C"; }
+  else { return "F"; }
+}
+
 class Point { I64 x; I64 y; }
 
 I64 ManhattanDist(Point a, Point b) {
@@ -100,3 +112,9 @@ Node lst = Node(10, Node(20, Node(30, NULL)));
 "== Classify ==\n";
 i = 0;
 for (i = 0; i < 4; i = i + 1) { Classify(i); }
+
+"== Grades ==\n";
+"95 -> %s\n", Sign(95);
+"82 -> %s\n", Sign(82);
+"71 -> %s\n", Grade(71);
+"40 -> %s\n", Grade(40);

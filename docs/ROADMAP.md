@@ -465,14 +465,22 @@ Can brokm compile itself? Eventually, yes — and brokm now hosts the front-end 
   and the C compiler produce identical results for every operator (including the value semantics of
   `&&`/`||`). `examples/sample.bk` gained a bit-twiddling section (`PopCount`, `IsEven`, flag masks);
   `tests/cases/selfhost15.bk` is a focused operator + precedence test.
+- **Step 19 — `else if` chains and function prototypes ✅.** Two constructs realcc's own source leans on
+  heavily (34 `else if` and several forward declarations) but the toy grammar lacked. An `else` may now
+  be followed by either a block or another `if` (the else body becomes a single nested if-statement), so
+  `if/else if/.../else` ladders work. And a function may be a **prototype** — `Type Name(params);` with
+  no body — which parses with `thenB == NULL` and emits nothing; the real definition later binds the
+  global, exactly as brokm treats forward declarations. Both confirmed identical to the C compiler.
+  `examples/sample.bk` gained a `Grade`/`Sign` example (forward-declared `Grade`, `if/else if/else`
+  ladder); `tests/cases/selfhost16.bk` is a focused test.
 - **Path:** lexer ✅ → parser/AST ✅ → code generator ✅ → real bytecode ✅ → control flow ✅ →
   functions ✅ → locals ✅ → arrays ✅ → strings ✅ → types + maps ✅ → structs ✅ → methods ✅ →
   `for`/`do`-`while` ✅ → `switch` ✅ → HolyC print ✅ → real brokm source ✅ → class-typed declarations ✅
-  → full operator set ✅. The in-brokm compiler compiles a substantial subset of brokm itself, agreeing
-  with the C compiler. Next: richer declarations and the remaining operators/sugar (`++`/`--`, compound
-  assignment, multiple declarators) — pushing toward compiling realcc itself. Then — much later — a
-  runtime in brokm, retiring the C bootstrap. The baseline JIT matters here: a self-hosted compiler is
-  compute-heavy.
+  → full operator set ✅ → `else if` + prototypes ✅. The in-brokm compiler compiles a substantial subset
+  of brokm itself, agreeing with the C compiler. The remaining gaps toward compiling realcc itself are
+  smaller sugar (`++`/`--`, compound assignment, multiple declarators) and any builtins realcc's source
+  uses. Then — much later — a runtime in brokm, retiring the C bootstrap. The baseline JIT matters here:
+  a self-hosted compiler is compute-heavy.
 
 ## Language features tracked across milestones
 
