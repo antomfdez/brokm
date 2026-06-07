@@ -98,6 +98,18 @@ The v0.9 API lets a host **register native functions**, **exchange values** (int
 strings), **read/set globals**, and **call brokm functions from C**. See
 [`examples/embed.c`](examples/embed.c) for a complete program (`make embed && ./embed-demo`).
 
+## Editor support
+
+Syntax highlighting for `.bk` files ships under [`editors/`](editors/):
+
+- **Neovim / Vim** — drop-in regex syntax (`editors/nvim/`), no build step.
+- **Sublime Text** — a `.sublime-syntax` (`editors/sublime/`), no build step.
+- **Zed** — a Tree-sitter extension (`editors/zed/`).
+- **Tree-sitter grammar** (`editors/tree-sitter-brokm/`) powers Zed and the
+  `nvim-treesitter` option; it parses every `.bk` file in this repo with no errors.
+
+Install instructions for each editor are in [`editors/README.md`](editors/README.md).
+
 ## Status
 
 v0.5 runs real programs (arithmetic, variables, control flow, functions, recursion, strings,

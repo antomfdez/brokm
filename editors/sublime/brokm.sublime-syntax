@@ -1,0 +1,141 @@
+%YAML 1.2
+---
+# Sublime Text syntax for brokm (HolyC-flavored).
+# Install: Preferences > Browse Packages > User, drop this file in, then set
+# the syntax via View > Syntax, or open any .bk file.
+name: brokm
+file_extensions:
+  - bk
+scope: source.brokm
+
+variables:
+  identifier: '[A-Za-z_][A-Za-z0-9_]*'
+  type_keyword: '\b(?:U0|U8|U16|U32|U64|I8|I16|I32|I64|F64|Bool)\b'
+  builtin: '\b(?:Print|PrintErr|ReadFile|WriteFile|Len|Append|CharAt|Chr|Substr|IndexOf|ToInt|ToStr|Abs|Min|Max|Sqrt|Pow|Floor|Ceil|MapNew|MapSet|MapGet|MapHas|MapDelete|MapLen|MapKeys|MAlloc|Free|PeekU8|PeekI64|PeekF64|PeekPtr|PokeU8|PokeI64|PokeF64|PokePtr|GcCollect|GcMinor|GcDisable|GcEnable|Opcode|Assemble|MakeClass|AddMethod)\b'
+
+contexts:
+  main:
+    - include: comments
+    - include: preprocessor
+    - include: keywords
+    - include: constants
+    - include: builtins
+    - include: types
+    - include: strings
+    - include: numbers
+    - include: class-decl
+    - include: functions
+    - include: operators
+
+  comments:
+    - match: '//'
+      scope: punctuation.definition.comment.brokm
+      push:
+        - meta_scope: comment.line.double-slash.brokm
+        - match: '$\n?'
+          pop: true
+    - match: '/\*'
+      scope: punctuation.definition.comment.brokm
+      push:
+        - meta_scope: comment.block.brokm
+        - match: '\*/'
+          scope: punctuation.definition.comment.brokm
+          pop: true
+
+  preprocessor:
+    - match: '^\s*(#\s*include)\b'
+      captures:
+        1: keyword.control.import.brokm
+      push:
+        - match: '"'
+          scope: punctuation.definition.string.begin.brokm
+          push:
+            - meta_scope: string.quoted.double.include.brokm
+            - match: '"'
+              scope: punctuation.definition.string.end.brokm
+              pop: true
+            - match: '$'
+              pop: true
+        - match: '$'
+          pop: true
+
+  keywords:
+    - match: '\b(if|else|switch)\b'
+      scope: keyword.control.conditional.brokm
+    - match: '\b(while|for|do)\b'
+      scope: keyword.control.loop.brokm
+    - match: '\b(case|default)\b'
+      scope: keyword.control.brokm
+    - match: '\b(return|break|continue)\b'
+      scope: keyword.control.flow.brokm
+    - match: '\b(class|struct)\b'
+      scope: keyword.declaration.class.brokm
+
+  constants:
+    - match: '\b(TRUE|FALSE)\b'
+      scope: constant.language.boolean.brokm
+    - match: '\bNULL\b'
+      scope: constant.language.null.brokm
+    - match: '\bthis\b'
+      scope: variable.language.this.brokm
+
+  types:
+    - match: '{{type_keyword}}'
+      scope: storage.type.brokm
+
+  builtins:
+    - match: '{{builtin}}'
+      scope: support.function.builtin.brokm
+
+  numbers:
+    - match: '\b0[xX][0-9a-fA-F]+\b'
+      scope: constant.numeric.hex.brokm
+    - match: '\b\d+\.\d+(?:[eE][+-]?\d+)?\b'
+      scope: constant.numeric.float.brokm
+    - match: '\b\d+[eE][+-]?\d+\b'
+      scope: constant.numeric.float.brokm
+    - match: '\b\d+\b'
+      scope: constant.numeric.integer.brokm
+
+  strings:
+    - match: '"'
+      scope: punctuation.definition.string.begin.brokm
+      push:
+        - meta_scope: string.quoted.double.brokm
+        - match: '\\(?:[ntr0\\"'']|x[0-9a-fA-F]+)'
+          scope: constant.character.escape.brokm
+        - match: '"'
+          scope: punctuation.definition.string.end.brokm
+          pop: true
+    - match: "'"
+      scope: punctuation.definition.string.begin.brokm
+      push:
+        - meta_scope: string.quoted.single.brokm
+        - match: '\\(?:[ntr0\\"'']|x[0-9a-fA-F]+)'
+          scope: constant.character.escape.brokm
+        - match: "'"
+          scope: punctuation.definition.string.end.brokm
+          pop: true
+
+  class-decl:
+    - match: '\b(class|struct)\s+({{identifier}})'
+      captures:
+        1: keyword.declaration.class.brokm
+        2: entity.name.class.brokm
+
+  functions:
+    # A name immediately followed by '(' is a call or definition.
+    - match: '({{identifier}})\s*(?=\()'
+      scope: variable.function.brokm
+
+  operators:
+    - match: '\+\+|--'
+      scope: keyword.operator.increment.brokm
+    - match: '<<=|>>=|[-+*/%&|^]='
+      scope: keyword.operator.assignment.augmented.brokm
+    - match: '==|!=|<=|>=|<<|>>|&&|\|\||[<>]'
+      scope: keyword.operator.comparison.brokm
+    - match: '='
+      scope: keyword.operator.assignment.brokm
+    - match: '[-+*/%&|^~!.]'
+      scope: keyword.operator.brokm

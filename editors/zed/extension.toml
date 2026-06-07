@@ -1,0 +1,14 @@
+id = "brokm"
+name = "brokm"
+version = "0.1.0"
+schema_version = 1
+authors = ["brokm project"]
+description = "Syntax highlighting for the brokm language (HolyC-flavored)"
+repository = "https://github.com/antomfdez/brokm"
+
+[grammars.brokm]
+repository = "https://github.com/antomfdez/brokm"
+# Point this at a commit that contains editors/tree-sitter-brokm with a
+# generated src/parser.c. Update after pushing changes to the grammar.
+commit = "REPLACE_WITH_COMMIT_SHA"
+path = "editors/tree-sitter-brokm"

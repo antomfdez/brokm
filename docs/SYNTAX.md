@@ -302,6 +302,17 @@ return expr;
 
 Truthiness: `nil` and `FALSE` are false; `0` / `0.0` are false; everything else is true.
 
+## Editor support
+
+Syntax highlighting for `.bk` files lives under [`editors/`](../editors/):
+
+- **Neovim / Vim** — drop-in regex syntax (`editors/nvim/`).
+- **Sublime Text** — `.sublime-syntax` (`editors/sublime/`).
+- **Zed** — Tree-sitter extension (`editors/zed/`).
+- **Tree-sitter grammar** (`editors/tree-sitter-brokm/`) — shared by Zed and `nvim-treesitter`.
+
+See [`editors/README.md`](../editors/README.md) for per-editor install steps.
+
 ## Known v0.1 simplifications
 
 - Postfix `x++` evaluates to the **new** value (like prefix). Fine in loop increments; rarely
