@@ -10,5 +10,5 @@ repository = "https://github.com/antomfdez/brokm"
 repository = "https://github.com/antomfdez/brokm"
 # Point this at a commit that contains editors/tree-sitter-brokm with a
 # generated src/parser.c. Update after pushing changes to the grammar.
-commit = "REPLACE_WITH_COMMIT_SHA"
+commit = "202ed742fea42cebcaec2c6c9df56e7db493af08"
 path = "editors/tree-sitter-brokm"
