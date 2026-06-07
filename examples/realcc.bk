@@ -1,5 +1,5 @@
 // realcc.bk — a small imperative language compiled to brokm's REAL bytecode.
-// Self-hosting steps 4-11: from the Opcode/Assemble bridge (step 4) through
+// Self-hosting steps 4-12: from the Opcode/Assemble bridge (step 4) through
 // control flow (step 5), FUNCTION DEFINITIONS with parameters, recursion, and
 // calls (step 6), function-scoped LOCAL VARIABLES (step 7), ARRAYS with the
 // native stdlib in reach (step 8), STRING literals (step 9), HolyC-style TYPE
@@ -21,18 +21,29 @@
 // It is fully self-contained: lexer, parser, and code generator, depending only
 // on the Opcode/Assemble natives. Non-parameter variables are real VM globals.
 //
+// Classes carry both fields and METHODS (step 12): `class C { I64 n; func Inc()
+// { this.n = this.n + 1; } }`, invoked as `obj.Inc()`. A method is compiled to
+// its own chunk (like a function) and attached to the class with the `AddMethod`
+// native; the receiver is local slot 0, named `this`. Calls emit OP_INVOKE.
+//
 // Grammar:
-//   stmt   = "func" ident "(" [ident ("," ident)*] ")" block
+//   stmt   = "func" ident "(" [param ("," param)*] ")" block
 //          | "return" expr ";"
 //          | "print" expr ";"
 //          | "if" "(" expr ")" block ["else" block]
 //          | "while" "(" expr ")" block
-//          | ident "=" expr ";"
+//          | "class" ident "{" member* "}"
+//          | lvalue "=" expr ";"
+//          | expr ";"
+//   member = [type | "func"] ident "(" [param ...] ")" block      (method)
+//          | [type] ident ";"                                     (field)
 //   block  = "{" stmt* "}"
 //   expr   = add (("<"|">"|"<="|">="|"=="|"!=") add)*
 //   add    = term (("+"|"-") term)*
 //   term   = factor (("*"|"/"|"%") factor)*
-//   factor = number | ident ["(" [expr ("," expr)*] ")"] | "(" expr ")" | "-" factor
+//   factor = primary (("[" expr "]") | ("." ident ["(" args ")"]))*
+//   primary= number | string | ident ["(" args ")"] | "[" args "]"
+//          | "(" expr ")" | "-" factor
 //
 // This is a LIBRARY (no top-level driver); see examples/realccdemo.bk.
 
@@ -42,16 +53,19 @@
 //   two-char ops 280 `==` 281 `!=` 282 `<=` 283 `>=`, else op char code.
 class Tok  { I64 kind; I64 val; U8 name; }
 // Node.op: 256 number, 257 variable, 264 string, 110 negate, 300 call,
-//   301 array literal, 302 index (left[right]), 303 field (left.name), else
-//   binary op code. For a call, `name` is the callee and `args` the argument
-//   Nodes; for an array literal, `args` holds the elements; for a string,
-//   `name` is the value; for a field, `left` is the object and `name` the field.
+//   301 array literal, 302 index (left[right]), 303 field (left.name),
+//   304 method call (left.name(args)), else binary op code. For a call, `name`
+//   is the callee and `args` the argument Nodes; for an array literal, `args`
+//   holds the elements; for a string, `name` is the value; for a field, `left`
+//   is the object and `name` the field; for a method call, `left` is the
+//   receiver, `name` the method, and `args` the arguments.
 class Node { I64 op; I64 val; U8 name; Node left; Node right; U0[] args; }
 // Stmt.kind: 0 assign, 1 print, 2 if, 3 while, 4 return, 5 func, 6 index-set
 //   (expr = target index node, expr2 = value), 7 expression statement,
 //   8 field-set (expr = target field node, expr2 = value), 9 class declaration
-//   (name = class name, params = field-name list). thenB/elseB hold Stmt lists;
-//   params holds a func's parameter names or a class's field names.
+//   (name = class name, params = field-name list, thenB = method func Stmts).
+//   thenB/elseB hold Stmt lists; params holds a func's parameter names or a
+//   class's field names.
 class Stmt { I64 kind; U8 name; Node expr; U0[] thenB; U0[] elseB; U0[] params; Node expr2; }
 
 // ---- character classes -----------------------------------------------------
@@ -141,6 +155,7 @@ Node MakeCall(U8 name, U0[] args)    { return Node(300, 0, name, NULL, NULL, arg
 Node MakeArray(U0[] elems)           { return Node(301, 0, NULL, NULL, NULL, elems); }
 Node MakeIndex(Node b, Node idx)     { return Node(302, 0, NULL, b, idx, NULL); }
 Node MakeField(Node obj, U8 name)    { return Node(303, 0, name, obj, NULL, NULL); }
+Node MakeInvoke(Node obj, U8 name, U0[] args) { return Node(304, 0, name, obj, NULL, args); }
 
 I64 IsCompare(I64 k) {
   return k == 60 || k == 62 || k == 280 || k == 281 || k == 282 || k == 283;
@@ -203,8 +218,19 @@ Node ParseFactor()
     } else {
       Advance();                             // '.'
       U8 field = toks[pos].name;
-      Advance();                             // field name
-      base = MakeField(base, field);
+      Advance();                             // field / method name
+      if (PeekKind() == 40) {                // method call:  obj.m ( args )
+        Advance();                           // '('
+        U0[] args = [];
+        if (PeekKind() != 41) {
+          Append(args, ParseExpr());
+          while (PeekKind() == 44) { Advance(); Append(args, ParseExpr()); }  // ','
+        }
+        Advance();                           // ')'
+        base = MakeInvoke(base, field, args);
+      } else {
+        base = MakeField(base, field);
+      }
     }
   }
   return base;
@@ -254,6 +280,27 @@ U0[] ParseBlock()
   return body;
 }
 
+// Parse a parenthesised parameter list `( [type] name, ... )` (the leading '('
+// is the current token) into a list of parameter names. Optional HolyC-style
+// type prefixes (with an optional `[]`) are consumed and discarded, so both
+// `(a, b)` and `(I64 a, U8[] b)` are accepted.
+U0[] ParseParamList()
+{
+  Advance();                               // '('
+  U0[] params = [];
+  if (PeekKind() != 41) {
+    if (IsTypeName(toks[pos].name)) { Advance(); if (PeekKind() == 91) { Advance(); Advance(); } }
+    Append(params, toks[pos].name); Advance();
+    while (PeekKind() == 44) {
+      Advance();
+      if (IsTypeName(toks[pos].name)) { Advance(); if (PeekKind() == 91) { Advance(); Advance(); } }
+      Append(params, toks[pos].name); Advance();
+    }
+  }
+  Advance();                               // ')'
+  return params;
+}
+
 Stmt ParseStmt()
 {
   if (PeekKind() == 262) {                 // func name ( params ) block
@@ -276,23 +323,34 @@ Stmt ParseStmt()
     Advance();                             // ';'
     return Stmt(4, NULL, e, NULL, NULL, NULL);
   }
-  if (PeekKind() == 265) {                 // class Name { Type field; ... }
+  if (PeekKind() == 265) {                 // class Name { fields + methods }
     Advance();
     U8 cname = toks[pos].name;
     Advance();                             // class name
     Advance();                             // '{'
     U0[] fieldNames = [];
+    U0[] methods = [];
+    // A member is either a field `[Type] name;` or a method
+    // `[Type | "func"] name(params) block`. The `(` after the name decides.
     while (PeekKind() != 125 && PeekKind() != 0) {
-      if (IsTypeName(toks[pos].name)) {    // optional field type
+      if (PeekKind() == 262) Advance();    // `func` method prefix
+      else if (IsTypeName(toks[pos].name)) {  // optional type prefix
         Advance();
         if (PeekKind() == 91) { Advance(); Advance(); }   // `[]`
       }
-      Append(fieldNames, toks[pos].name);  // field name
+      U8 mname = toks[pos].name;            // member name
       Advance();
-      Advance();                           // ';'
+      if (PeekKind() == 40) {               // method: name ( params ) block
+        U0[] params = ParseParamList();
+        U0[] body = ParseBlock();
+        Append(methods, Stmt(5, mname, NULL, body, NULL, params, NULL));
+      } else {
+        Append(fieldNames, mname);          // field name
+        Advance();                          // ';'
+      }
     }
     Advance();                             // '}'
-    return Stmt(9, cname, NULL, NULL, NULL, fieldNames, NULL);
+    return Stmt(9, cname, NULL, methods, NULL, fieldNames, NULL);
   }
   if (PeekKind() == 259) {                 // if ( cond ) block [else block]
     Advance();
@@ -405,6 +463,7 @@ I64 ROP_INDEX_GET     = Opcode("INDEX_GET");
 I64 ROP_INDEX_SET     = Opcode("INDEX_SET");
 I64 ROP_GET_FIELD     = Opcode("GET_FIELD");
 I64 ROP_SET_FIELD     = Opcode("SET_FIELD");
+I64 ROP_INVOKE        = Opcode("INVOKE");
 I64 ROP_JUMP          = Opcode("JUMP");
 I64 ROP_JUMP_IF_FALSE = Opcode("JUMP_IF_FALSE");
 I64 ROP_LOOP          = Opcode("LOOP");
@@ -442,6 +501,9 @@ I64 Contains(U0[] names, U8 name)
 I64 LocalSlot(U8 name)
 {
   if (curLocals == NULL) return -1;
+  // Inside a method, the receiver lives in slot 0 and is named `this` (mirrors
+  // the C compiler). Ordinary functions never reference `this`.
+  if (name == "this") return 0;
   I64 i = 0;
   while (i < Len(curLocals)) {
     if (curLocals[i] == name) return i + 1;
@@ -529,6 +591,15 @@ U0 GenExpr(Node n)
     EmitArg(ROP_GET_FIELD, AddConst(n.name));
     return;
   }
+  if (n.op == 304) {                          // method call: recv, args, INVOKE
+    GenExpr(n.left);                          // receiver -> slot 0 (`this`)
+    I64 i = 0;
+    while (i < Len(n.args)) { GenExpr(n.args[i]); i = i + 1; }
+    Emit(ROP_INVOKE);
+    Append(rcode, AddConst(n.name));          // method-name constant
+    Append(rcode, Len(n.args));               // argument count
+    return;
+  }
   GenExpr(n.left);
   GenExpr(n.right);
   Emit(BinOpcode(n.op));
@@ -602,6 +673,13 @@ U0 GenStmt(Stmt s)
   }
   if (s.kind == 9) {                          // class declaration -> MakeClass + bind
     U0 klass = MakeClass(s.name, s.params);
+    I64 i = 0;
+    while (i < Len(s.thenB)) {                 // attach each method to the class
+      Stmt m = s.thenB[i];
+      U0 fnval = GenFunction(m);
+      AddMethod(klass, m.name, fnval);
+      i = i + 1;
+    }
     EmitArg(ROP_CONSTANT, AddConst(klass));
     EmitArg(ROP_DEFINE_GLOBAL, AddConst(s.name));
     return;

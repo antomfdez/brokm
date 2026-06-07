@@ -109,3 +109,32 @@ U0 structProg = Compile("
   Print(\"sum = \"); print sum(Cons(5, Cons(7, Cons(9, NULL))));
 ");
 structProg();                                           // dot = 11 / sum = 21
+
+// Methods (step 12): classes with behaviour, an implicit `this` receiver,
+// sibling method calls, and reference semantics — all invoked via OP_INVOKE.
+U0 methodProg = Compile("
+  Print(\"-- methods --\n\");
+  class Counter {
+    I64 n;
+    func Inc() { this.n = this.n + 1; }
+    func IncTwice() { this.Inc(); this.Inc(); }
+    I64 Get() { return this.n; }
+  }
+  func Bump(c) { c.Inc(); }
+  c = Counter(0);
+  c.IncTwice();
+  Bump(c);
+  Print(\"counter = \"); print c.Get();
+
+  class Account {
+    I64 balance;
+    func Deposit(a) { this.balance = this.balance + a; }
+    func Withdraw(a) { if (a <= this.balance) { this.balance = this.balance - a; } }
+    I64 Balance() { return this.balance; }
+  }
+  acct = Account(100);
+  acct.Deposit(50);
+  acct.Withdraw(30);
+  Print(\"balance = \"); print acct.Balance();
+");
+methodProg();                                           // counter = 3 / balance = 120

@@ -1,0 +1,37 @@
+// Self-hosting step 12 — METHODS on classes in the in-brokm compiler.
+// Cross-directory #include exercises the module system (v0.10); the toy program
+// declares classes with methods (`func`-style and typed), mutates fields through
+// `this`, calls sibling methods (`this.Other()`), passes instances to methods,
+// and relies on reference semantics. Methods compile to their own chunks and are
+// attached with the AddMethod native; calls run through OP_INVOKE on the C VM.
+//
+// Reminder: the toy language has no `//` comments — keep them at the brokm level,
+// outside the Compile("...") string.
+#include "../../examples/realcc.bk"
+
+U0 prog = Compile("
+  class Counter {
+    I64 n;
+    func Inc() { this.n = this.n + 1; }
+    func IncTwice() { this.Inc(); this.Inc(); }
+    func AddN(k) { this.n = this.n + k; return this.n; }
+    I64 Get() { return this.n; }
+  }
+  class Point {
+    I64 x; I64 y;
+    func DistL1(o) { return Abs(this.x - o.x) + Abs(this.y - o.y); }
+  }
+  func Bump(c) { c.Inc(); }
+
+  c = Counter(0);
+  c.Inc();
+  c.IncTwice();
+  Bump(c);
+  print c.Get();
+  print c.AddN(10);
+
+  p = Point(1, 2);
+  q = Point(4, 6);
+  print p.DistL1(q);
+");
+prog();

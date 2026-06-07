@@ -539,6 +539,23 @@ static Value native_make_class(int argc, Value *args) {
   return OBJ_VAL(klass);
 }
 
+/* AddMethod(klass, name, fn) -> the class, after binding `fn` (an ObjFunction)
+ * as a method named `name` on the class. Methods are stored in the class's
+ * methods table at compile time by the C compiler; this gives brokm a runtime
+ * way to attach one to a class it built with MakeClass, so the self-hosting
+ * compiler can emit methods invoked via OP_INVOKE (the method sees the receiver
+ * as `this` in local slot 0). The store may create an old-class -> young-fn
+ * edge, hence the write barrier (mirrors map_set). */
+static Value native_add_method(int argc, Value *args) {
+  if (argc < 3 || !IS_CLASS(args[0]) || !IS_STRING(args[1]) ||
+      !IS_FUNCTION(args[2]))
+    return NIL_VAL;
+  ObjClass *klass = AS_CLASS(args[0]);
+  table_set(&klass->methods, AS_STRING(args[1]), args[2]);
+  gc_write_barrier((Obj *)klass, args[2]);
+  return args[0];
+}
+
 void natives_register(void) {
   vm_define_native("Print", native_print);
   vm_define_native("PrintErr", native_print_err);
@@ -584,4 +601,5 @@ void natives_register(void) {
   vm_define_native("Opcode", native_opcode);
   vm_define_native("Assemble", native_assemble);
   vm_define_native("MakeClass", native_make_class);
+  vm_define_native("AddMethod", native_add_method);
 }
