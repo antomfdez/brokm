@@ -62,13 +62,17 @@ U0[] Tokenize(U8 src)
       i = i + 1;                       // skip closing quote
       Append(out, Tok(264, 0, s));
     } else {
-      // Two-character operators: ==, !=, <=, >=.
+      // Two-character operators: == != <= >= && || << >>.
       I64 nx = 0;
       if (i + 1 < n) nx = CharAt(src, i + 1);
-      if (c == 61 && nx == 61)      { Append(out, Tok(280, 0, NULL)); i = i + 2; }
-      else if (c == 33 && nx == 61) { Append(out, Tok(281, 0, NULL)); i = i + 2; }
-      else if (c == 60 && nx == 61) { Append(out, Tok(282, 0, NULL)); i = i + 2; }
-      else if (c == 62 && nx == 61) { Append(out, Tok(283, 0, NULL)); i = i + 2; }
+      if (c == 61 && nx == 61)        { Append(out, Tok(280, 0, NULL)); i = i + 2; }  // ==
+      else if (c == 33 && nx == 61)   { Append(out, Tok(281, 0, NULL)); i = i + 2; }  // !=
+      else if (c == 60 && nx == 61)   { Append(out, Tok(282, 0, NULL)); i = i + 2; }  // <=
+      else if (c == 62 && nx == 61)   { Append(out, Tok(283, 0, NULL)); i = i + 2; }  // >=
+      else if (c == 38 && nx == 38)   { Append(out, Tok(284, 0, NULL)); i = i + 2; }  // &&
+      else if (c == 124 && nx == 124) { Append(out, Tok(285, 0, NULL)); i = i + 2; }  // ||
+      else if (c == 60 && nx == 60)   { Append(out, Tok(286, 0, NULL)); i = i + 2; }  // <<
+      else if (c == 62 && nx == 62)   { Append(out, Tok(287, 0, NULL)); i = i + 2; }  // >>
       else { Append(out, Tok(c, 0, NULL)); i = i + 1; }  // single-char token
     }
   }

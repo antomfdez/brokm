@@ -32,9 +32,17 @@ I64 ROP_SET_FIELD     = Opcode("SET_FIELD");
 I64 ROP_INVOKE        = Opcode("INVOKE");
 I64 ROP_JUMP          = Opcode("JUMP");
 I64 ROP_JUMP_IF_FALSE = Opcode("JUMP_IF_FALSE");
+I64 ROP_JUMP_IF_TRUE  = Opcode("JUMP_IF_TRUE");
 I64 ROP_LOOP          = Opcode("LOOP");
 I64 ROP_NIL           = Opcode("NIL");
 I64 ROP_RETURN        = Opcode("RETURN");
+I64 ROP_BIT_AND       = Opcode("BIT_AND");
+I64 ROP_BIT_OR        = Opcode("BIT_OR");
+I64 ROP_BIT_XOR       = Opcode("BIT_XOR");
+I64 ROP_BIT_NOT       = Opcode("BIT_NOT");
+I64 ROP_SHL           = Opcode("SHL");
+I64 ROP_SHR           = Opcode("SHR");
+I64 ROP_NOT           = Opcode("NOT");
 
 // ---- emit buffers + helpers ------------------------------------------------
 // rcode/rconsts are the chunk being built; curLocals is the local-name list of
@@ -121,6 +129,11 @@ I64 BinOpcode(I64 c)
   if (c == 282) return ROP_LESS_EQUAL;
   if (c == 283) return ROP_GREATER_EQUAL;
   if (c == 280) return ROP_EQUAL;
+  if (c == 38)  return ROP_BIT_AND;     // &
+  if (c == 124) return ROP_BIT_OR;      // |
+  if (c == 94)  return ROP_BIT_XOR;     // ^
+  if (c == 286) return ROP_SHL;         // <<
+  if (c == 287) return ROP_SHR;         // >>
   return ROP_NOT_EQUAL;            // 281 `!=`
 }
 
@@ -136,7 +149,25 @@ U0 GenExpr(Node n)
     else           EmitArg(ROP_GET_GLOBAL, AddConst(n.name));
     return;
   }
-  if (n.op == 110) { GenExpr(n.left); Emit(ROP_NEGATE); return; }
+  if (n.op == 110) { GenExpr(n.left); Emit(ROP_NEGATE); return; }   // unary -
+  if (n.op == 111) { GenExpr(n.left); Emit(ROP_NOT); return; }      // unary !
+  if (n.op == 112) { GenExpr(n.left); Emit(ROP_BIT_NOT); return; }  // unary ~
+  if (n.op == 284) {                          // logical && (short-circuit)
+    GenExpr(n.left);
+    I64 endJump = EmitJump(ROP_JUMP_IF_FALSE);  // left falsy: keep it, skip right
+    Emit(ROP_POP);
+    GenExpr(n.right);
+    PatchJump(endJump);
+    return;
+  }
+  if (n.op == 285) {                          // logical || (short-circuit)
+    GenExpr(n.left);
+    I64 endJump = EmitJump(ROP_JUMP_IF_TRUE);   // left truthy: keep it, skip right
+    Emit(ROP_POP);
+    GenExpr(n.right);
+    PatchJump(endJump);
+    return;
+  }
   if (n.op == 300) {                          // call: push callee, args, OP_CALL
     EmitArg(ROP_GET_GLOBAL, AddConst(n.name));
     I64 i = 0;

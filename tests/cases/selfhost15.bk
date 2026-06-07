@@ -1,0 +1,23 @@
+// Self-hosting step 18 — bitwise, shift, logical, and unary operators in the
+// in-brokm compiler, with brokm's precedence (|| < && < | < ^ < & < == != <
+// relational < shift < + - < * / %). The toy program exercises each operator
+// and a couple of precedence-sensitive expressions; realcc's output matches the
+// C compiler's for the same expressions (see examples/sample.bk via
+// `make test-selfcompile`).
+#include "../../examples/realcc.bk"
+
+U0 prog = Compile("
+  \"and  = %d\n\", 12 & 10;
+  \"or   = %d\n\", 12 | 3;
+  \"xor  = %d\n\", 6 ^ 3;
+  \"shl  = %d\n\", 1 << 4;
+  \"shr  = %d\n\", 256 >> 2;
+  \"bnot = %d\n\", ~0;
+  \"not0 = %d\n\", !0;
+  \"not5 = %d\n\", !5;
+  \"prec = %d\n\", 2 + 3 * 4 == 14;
+  \"land = %d\n\", 1 < 2 && 3 < 4;
+  \"lor  = %d\n\", 0 || 7;
+  \"mix  = %d\n\", 1 & 2 | 4;
+");
+prog();

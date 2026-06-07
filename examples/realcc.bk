@@ -1,5 +1,5 @@
 // realcc.bk — a small imperative language compiled to brokm's REAL bytecode.
-// Self-hosting steps 4-15: from the Opcode/Assemble bridge (step 4) through
+// Self-hosting steps 4-18: from the Opcode/Assemble bridge (step 4) through
 // control flow (step 5), FUNCTION DEFINITIONS with parameters, recursion, and
 // calls (step 6), function-scoped LOCAL VARIABLES (step 7), ARRAYS with the
 // native stdlib in reach (step 8), STRING literals (step 9), HolyC-style TYPE
@@ -43,12 +43,19 @@
 //   member = [type | "func"] ident "(" [param ...] ")" block      (method)
 //          | [type] ident ";"                                     (field)
 //   block  = "{" stmt* "}"
-//   expr   = add (("<"|">"|"<="|">="|"=="|"!=") add)*
+//   expr   = and  ("||" and)*           // precedence, lowest to highest,
+//   and    = bor  ("&&" bor)*           // mirrors brokm: || && | ^ &
+//   bor    = bxor ("|" bxor)*           // == != | < > <= >= | << >> |
+//   bxor   = band ("^" band)*           // + - | * / % | unary | postfix
+//   band   = eq   ("&" eq)*
+//   eq     = cmp  (("=="|"!=") cmp)*
+//   cmp    = shift (("<"|">"|"<="|">=") shift)*
+//   shift  = add  (("<<"|">>") add)*
 //   add    = term (("+"|"-") term)*
 //   term   = factor (("*"|"/"|"%") factor)*
 //   factor = primary (("[" expr "]") | ("." ident ["(" args ")"]))*
 //   primary= number | string | ident ["(" args ")"] | "[" args "]"
-//          | "(" expr ")" | "-" factor
+//          | "(" expr ")" | ("-"|"!"|"~") factor
 
 #include "realcc_types.bk"
 #include "realcc_lex.bk"

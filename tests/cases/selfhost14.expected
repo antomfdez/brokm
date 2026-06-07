@@ -16,6 +16,13 @@ counter = 105
 dist = 7
 == List ==
 sum = 60
+== Bits ==
+12 & 10 = 8
+1 << 8 = 256
+flags = 21
+popcount(255) = 8
+5 even? 0  8 even? 1
+guard = 1
 == Classify ==
 zero
 one

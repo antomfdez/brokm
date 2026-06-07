@@ -1,0 +1,12 @@
+and  = 8
+or   = 15
+xor  = 5
+shl  = 16
+shr  = 64
+bnot = -1
+not0 = 1
+not5 = 0
+prec = 1
+land = 1
+lor  = 7
+mix  = 4

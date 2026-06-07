@@ -456,12 +456,21 @@ Can brokm compile itself? Eventually, yes — and brokm now hosts the front-end 
   declarations throughout (no more `U0` stand-ins), and still compiles byte-identically via both the C
   and in-brokm compilers (`make test-selfcompile`). Verified red/green: stubbing the registry makes
   `sample.bk` fail to parse.
+- **Step 18 — bitwise, shift, logical, and unary operators ✅.** realcc's expression grammar gained the
+  full operator set with **brokm's exact precedence ladder** (`||` < `&&` < `|` < `^` < `&` < equality <
+  comparison < shift < additive < multiplicative < unary): bitwise `& | ^`, shifts `<< >>`, logical
+  `&& ||` (short-circuit, via `OP_JUMP_IF_FALSE`/`OP_JUMP_IF_TRUE`), and unary `!` and `~`. Equality and
+  comparison, previously one level, are now split to match brokm. The bitwise/shift operators map to the
+  existing `OP_BIT_*`/`OP_SHL`/`OP_SHR` opcodes; no C change. Confirmed against brokm directly — realcc
+  and the C compiler produce identical results for every operator (including the value semantics of
+  `&&`/`||`). `examples/sample.bk` gained a bit-twiddling section (`PopCount`, `IsEven`, flag masks);
+  `tests/cases/selfhost15.bk` is a focused operator + precedence test.
 - **Path:** lexer ✅ → parser/AST ✅ → code generator ✅ → real bytecode ✅ → control flow ✅ →
   functions ✅ → locals ✅ → arrays ✅ → strings ✅ → types + maps ✅ → structs ✅ → methods ✅ →
-  `for`/`do`-`while` ✅ → `switch` ✅ → HolyC print ✅ → real brokm source ✅ → class-typed declarations ✅.
-  The in-brokm compiler compiles a usable subset of brokm itself, agreeing with the C compiler. Next:
-  keep widening the subset — bitwise/logical operators (`& | ^ << >> && ||`), `++`/`--`, and richer
-  declarations — so larger real programs (eventually realcc itself) compile. Then — much later — a
+  `for`/`do`-`while` ✅ → `switch` ✅ → HolyC print ✅ → real brokm source ✅ → class-typed declarations ✅
+  → full operator set ✅. The in-brokm compiler compiles a substantial subset of brokm itself, agreeing
+  with the C compiler. Next: richer declarations and the remaining operators/sugar (`++`/`--`, compound
+  assignment, multiple declarators) — pushing toward compiling realcc itself. Then — much later — a
   runtime in brokm, retiring the C bootstrap. The baseline JIT matters here: a self-hosted compiler is
   compute-heavy.
 

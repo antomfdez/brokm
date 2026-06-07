@@ -7,11 +7,15 @@
 // Tok.kind: 256 number, 257 ident, 258 print, 259 if, 260 else, 261 while,
 //   262 func, 263 return, 264 string (value in `name`), 265 class, 266 NULL,
 //   267 for, 268 do, 269 switch, 270 case, 271 default, 272 break, 0 EOF,
-//   two-char ops 280 `==` 281 `!=` 282 `<=` 283 `>=`, else op char code.
+//   two-char ops 280 `==` 281 `!=` 282 `<=` 283 `>=` 284 `&&` 285 `||`
+//   286 `<<` 287 `>>`, else op char code (incl. single `&` `|` `^` `~` `!`).
 class Tok  { I64 kind; I64 val; U8 name; }
-// Node.op: 256 number, 257 variable, 264 string, 110 negate, 300 call,
-//   301 array literal, 302 index (left[right]), 303 field (left.name),
-//   304 method call (left.name(args)), else binary op code. For a call, `name`
+// Node.op: 256 number, 257 variable, 264 string, 110 negate, 111 not (!),
+//   112 bitnot (~), 284 logical && (short-circuit), 285 logical || (short-
+//   circuit), 300 call, 301 array literal, 302 index (left[right]), 303 field
+//   (left.name), 304 method call (left.name(args)), else binary op code (the
+//   operator's token kind, incl. bitwise `&` `|` `^` and shifts `<<` `>>`).
+//   For a call, `name`
 //   is the callee and `args` the argument Nodes; for an array literal, `args`
 //   holds the elements; for a string, `name` is the value; for a field, `left`
 //   is the object and `name` the field; for a method call, `left` is the

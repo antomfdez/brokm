@@ -52,6 +52,17 @@ I64 SumList(Node head) {
   return head.val + SumList(head.next);
 }
 
+I64 PopCount(I64 x) {
+  I64 count = 0;
+  while (x != 0) {
+    count = count + (x & 1);
+    x = x >> 1;
+  }
+  return count;
+}
+
+I64 IsEven(I64 x) { return (x & 1) == 0; }
+
 "== Fib ==\n";
 I64 i = 0;
 for (i = 0; i < 8; i = i + 1) {
@@ -77,6 +88,14 @@ Point p2 = Point(4, 6);
 "== List ==\n";
 Node lst = Node(10, Node(20, Node(30, NULL)));
 "sum = %d\n", SumList(lst);
+
+"== Bits ==\n";
+"12 & 10 = %d\n", 12 & 10;
+"1 << 8 = %d\n", 1 << 8;
+"flags = %d\n", (1 << 0) | (1 << 2) | (1 << 4);
+"popcount(255) = %d\n", PopCount(255);
+"5 even? %d  8 even? %d\n", IsEven(5), IsEven(8);
+"guard = %d\n", 1 < 2 && 3 < 4 || 0;
 
 "== Classify ==\n";
 i = 0;

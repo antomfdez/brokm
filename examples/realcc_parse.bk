@@ -15,16 +15,14 @@ Node MakeNil()                       { return Node(305, 0, NULL, NULL, NULL, NUL
 Node MakeStr(U8 s)                   { return Node(264, 0, s, NULL, NULL, NULL); }
 Node MakeVar(U8 name)                { return Node(257, 0, name, NULL, NULL, NULL); }
 Node MakeNeg(Node c)                 { return Node(110, 0, NULL, c, NULL, NULL); }
+Node MakeNot(Node c)                 { return Node(111, 0, NULL, c, NULL, NULL); }
+Node MakeBitNot(Node c)              { return Node(112, 0, NULL, c, NULL, NULL); }
 Node MakeBin(I64 op, Node l, Node r) { return Node(op, 0, NULL, l, r, NULL); }
 Node MakeCall(U8 name, U0[] args)    { return Node(300, 0, name, NULL, NULL, args); }
 Node MakeArray(U0[] elems)           { return Node(301, 0, NULL, NULL, NULL, elems); }
 Node MakeIndex(Node b, Node idx)     { return Node(302, 0, NULL, b, idx, NULL); }
 Node MakeField(Node obj, U8 name)    { return Node(303, 0, name, obj, NULL, NULL); }
 Node MakeInvoke(Node obj, U8 name, U0[] args) { return Node(304, 0, name, obj, NULL, args); }
-
-I64 IsCompare(I64 k) {
-  return k == 60 || k == 62 || k == 280 || k == 281 || k == 282 || k == 283;
-}
 
 // brokm scalar/aggregate type keywords. Accepted as declaration prefixes and
 // then ignored: like brokm itself, the toy language is gradually typed, so the
@@ -86,6 +84,8 @@ Node ParsePrimary()
   }
   if (t.kind == 40)  { Advance(); Node e = ParseExpr(); Advance(); return e; } // ( )
   if (t.kind == 45)  { Advance(); return MakeNeg(ParseFactor()); }             // unary -
+  if (t.kind == 33)  { Advance(); return MakeNot(ParseFactor()); }             // unary !
+  if (t.kind == 126) { Advance(); return MakeBitNot(ParseFactor()); }          // unary ~
   return MakeNum(0);
 }
 
@@ -141,14 +141,76 @@ Node ParseAdd()
   return left;
 }
 
-Node ParseExpr()
+// Expression precedence, lowest (ParseExpr / `||`) to highest, mirroring brokm:
+// `||` < `&&` < `|` < `^` < `&` < (`==` `!=`) < (`<` `>` `<=` `>=`) < (`<<`
+// `>>`) < (`+` `-`) < (`*` `/` `%`) < unary < postfix. Bitwise and shift map to
+// ordinary binary opcodes; `&&` and `||` (ops 284/285) short-circuit in codegen.
+Node ParseShift()
 {
   Node left = ParseAdd();
-  while (IsCompare(PeekKind())) {  // comparisons (lowest precedence)
+  while (PeekKind() == 286 || PeekKind() == 287) {        // << >>
     I64 op = PeekKind();
     Advance();
     left = MakeBin(op, left, ParseAdd());
   }
+  return left;
+}
+
+Node ParseComparison()
+{
+  Node left = ParseShift();
+  while (PeekKind() == 60 || PeekKind() == 62 ||
+         PeekKind() == 282 || PeekKind() == 283) {        // < > <= >=
+    I64 op = PeekKind();
+    Advance();
+    left = MakeBin(op, left, ParseShift());
+  }
+  return left;
+}
+
+Node ParseEquality()
+{
+  Node left = ParseComparison();
+  while (PeekKind() == 280 || PeekKind() == 281) {        // == !=
+    I64 op = PeekKind();
+    Advance();
+    left = MakeBin(op, left, ParseComparison());
+  }
+  return left;
+}
+
+Node ParseBitAnd()
+{
+  Node left = ParseEquality();
+  while (PeekKind() == 38) { Advance(); left = MakeBin(38, left, ParseEquality()); }  // &
+  return left;
+}
+
+Node ParseBitXor()
+{
+  Node left = ParseBitAnd();
+  while (PeekKind() == 94) { Advance(); left = MakeBin(94, left, ParseBitAnd()); }    // ^
+  return left;
+}
+
+Node ParseBitOr()
+{
+  Node left = ParseBitXor();
+  while (PeekKind() == 124) { Advance(); left = MakeBin(124, left, ParseBitXor()); }  // |
+  return left;
+}
+
+Node ParseAnd()
+{
+  Node left = ParseBitOr();
+  while (PeekKind() == 284) { Advance(); left = MakeBin(284, left, ParseBitOr()); }   // &&
+  return left;
+}
+
+Node ParseExpr()
+{
+  Node left = ParseAnd();
+  while (PeekKind() == 285) { Advance(); left = MakeBin(285, left, ParseAnd()); }     // ||
   return left;
 }
 
