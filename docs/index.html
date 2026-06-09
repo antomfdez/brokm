@@ -147,9 +147,9 @@ make bench     <span class="c"># benchmark the JIT against the interpreter</span
 <pre><span class="k">#include</span> <span class="s">"brokm.h"</span>
 
 <span class="k">int</span> main(<span class="k">void</span>) {
-  brokm_init();
-  brokm_eval(<span class="s">"\"embedded!\\n\";"</span>);
-  brokm_shutdown();
+  BrokmVM *vm = brokm_new();  <span class="c">/* any number of independent VMs */</span>
+  brokm_eval(vm, <span class="s">"\"embedded!\\n\";"</span>);
+  brokm_free(vm);
   <span class="k">return</span> 0;
 }</pre>
   </div>

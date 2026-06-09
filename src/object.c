@@ -13,8 +13,8 @@ static Obj *allocate_object(size_t size, ObjType type) {
   obj->type = type;
   obj->mark = 0;
   obj->gen = 0;
-  obj->next = vm.objects;
-  vm.objects = obj;
+  obj->next = vm->objects;
+  vm->objects = obj;
   return obj;
 }
 
@@ -36,14 +36,14 @@ static ObjString *allocate_string(char *chars, int length, U32 hash) {
   /* table_set may grow the table and trigger a collection; keep the new string
    * reachable on the stack across that window. */
   vm_push(OBJ_VAL(string));
-  table_set(&vm.strings, string, NIL_VAL);
+  table_set(&vm->strings, string, NIL_VAL);
   vm_pop();
   return string;
 }
 
 ObjString *string_take(char *chars, int length) {
   U32 hash = hash_string(chars, length);
-  ObjString *interned = table_find_string(&vm.strings, chars, length, hash);
+  ObjString *interned = table_find_string(&vm->strings, chars, length, hash);
   if (interned != NULL) {
     FREE_ARRAY(char, chars, length + 1);
     return interned;
@@ -53,7 +53,7 @@ ObjString *string_take(char *chars, int length) {
 
 ObjString *string_copy(const char *chars, int length) {
   U32 hash = hash_string(chars, length);
-  ObjString *interned = table_find_string(&vm.strings, chars, length, hash);
+  ObjString *interned = table_find_string(&vm->strings, chars, length, hash);
   if (interned != NULL) return interned;
 
   char *heap = ALLOCATE(char, length + 1);
@@ -203,11 +203,11 @@ void object_free(Obj *obj) {
 /* Walk the intrusive list and release everything. Until the GC lands (v0.2),
  * this is how brokm guarantees no leaks at exit. */
 void objects_free_all(void) {
-  Obj *obj = vm.objects;
+  Obj *obj = vm->objects;
   while (obj != NULL) {
     Obj *next = obj->next;
     object_free(obj);
     obj = next;
   }
-  vm.objects = NULL;
+  vm->objects = NULL;
 }

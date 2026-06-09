@@ -89,7 +89,14 @@ void jit_pool_free(void) {
 }
 
 /* ---- driver ----------------------------------------------------------- */
+
+/* The page pool is shared by every VM in the process (each VM's generated code
+ * lives in it), so it is reference-counted by live VMs: the self-test runs for
+ * the first VM and the pool is released when the last VM is destroyed. */
+static int g_vmCount = 0;
+
 void jit_init(void) {
+  if (g_vmCount++ > 0) return; /* pool already up; self-test already ran */
   /* The backends read Values straight out of memory, so the layout must match
    * the constants they bake in (type tag at offset 0, payload at offset 8). */
   bool layoutOK = sizeof(Value) == 16 && offsetof(Value, type) == 0 &&
@@ -101,7 +108,9 @@ void jit_init(void) {
   }
 }
 
-void jit_shutdown(void) { jit_pool_free(); }
+void jit_shutdown(void) {
+  if (g_vmCount > 0 && --g_vmCount == 0) jit_pool_free();
+}
 
 void jit_try_compile(ObjFunction *fn) {
   void *entry = g_jitUsable ? jit_compile_arch(fn) : NULL;

@@ -88,8 +88,22 @@ Dispatch is a portable `switch`. A computed-goto fast path can be added behind a
 
 ## Embedding model
 
-brokm uses a single process-global `VM` (`extern VM vm;`), which keeps `object.c` and `natives.c`
-free of VM-pointer plumbing. The public `brokm.h` API (v0.9) lets a host exchange scalar and
-string values, register C natives, read/set globals, and call brokm functions from C, on top of
-`init / eval / run_file / shutdown`. **Multi-instance embedding** (replacing the global `VM`)
-remains a later milestone.
+The runtime is **instance-based** (v0.11): `brokm_new()` creates an independent `BrokmVM` — its
+own value stack, globals, interned strings, object list, and collector — and a process may hold
+any number of them, created, interleaved, and destroyed in any order.
+
+Internally the interpreter, GC, allocator, and natives act on a **current-instance pointer**
+(`extern VM *vm;`) rather than threading a parameter through every function — which keeps
+`object.c` and `natives.c` free of VM-pointer plumbing. Every public API entry point makes its
+target the current instance and restores the previous one on exit, so a host native running on
+one VM can drive another VM and return cleanly. Two pieces of state stay process-wide: the JIT's
+executable-page pool (reference-counted by live VMs, since each VM's generated code lives in it;
+generated code bakes its *owning* VM's addresses, which is sound because functions never migrate
+between instances) and the compile-phase scratch state (parser/checker), which is reset per
+compile. Both are why the runtime is single-threaded: VMs interleave freely on one thread, but
+one VM per *thread* would need a thread-local current pointer and a per-VM (or locked) page pool
+— future work.
+
+The public `brokm.h` API lets a host exchange scalar and string values, register C natives (per
+VM — inside one, `brokm_current()` is the calling instance), read/set globals, and call brokm
+functions from C.

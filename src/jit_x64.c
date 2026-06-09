@@ -8,7 +8,7 @@
  *
  * Conventions in generated code:
  *   r14 = slots base (callee at slots[0], args follow)
- *   r15 = cached vm.stackTop; flushed to memory before any helper call and
+ *   r15 = cached vm->stackTop; flushed to memory before any helper call and
  *         reloaded after. r11 holds baked addresses; rax/rcx/rdx/r10 compute.
  * A Value is 16 bytes: the 4-byte type tag at offset 0, the 8-byte payload at
  * offset 8 (asserted in the shared jit_init). */
@@ -18,7 +18,7 @@
 
 #include <stdlib.h>
 
-#include "vm.h" /* the global `vm` (for &vm.stackTop) + value_truthy */
+#include "vm.h" /* the global `vm` (for &vm->stackTop) + value_truthy */
 
 /* ---- registers / condition codes -------------------------------------- */
 enum { RAX = 0, RCX = 1, RDX = 2, RSI = 6, RDI = 7, R10 = 10, R11 = 11,
@@ -105,8 +105,8 @@ static void patch_rel(Emit *e, int at, int target) {
 }
 
 /* ---- shared helpers ---------------------------------------------------- */
-static void emit_flush_top(Emit *e) { movabs(e, ADDR, (U64)(uintptr_t)&vm.stackTop); st(e, STKTOP, ADDR, 0, 1); }
-static void emit_reload_top(Emit *e) { movabs(e, ADDR, (U64)(uintptr_t)&vm.stackTop); ld(e, STKTOP, ADDR, 0, 1); }
+static void emit_flush_top(Emit *e) { movabs(e, ADDR, (U64)(uintptr_t)&vm->stackTop); st(e, STKTOP, ADDR, 0, 1); }
+static void emit_reload_top(Emit *e) { movabs(e, ADDR, (U64)(uintptr_t)&vm->stackTop); ld(e, STKTOP, ADDR, 0, 1); }
 
 /* push a 16-byte value already in rax (word0) / rcx (word1) */
 static void emit_push_rax_rcx(Emit *e) {
@@ -120,7 +120,7 @@ static void compiled_prologue(Emit *e) {
   e_push(e, R14);
   e_push(e, R15);            /* rsp now 16-byte aligned for calls */
   mov_rr(e, SLOTS, RDI);     /* r14 = slots */
-  emit_reload_top(e);        /* r15 = vm.stackTop */
+  emit_reload_top(e);        /* r15 = vm->stackTop */
 }
 static void emit_restore_and_ret(Emit *e) {
   e_pop(e, R15);
@@ -312,8 +312,8 @@ static void *compile_chunk(ObjFunction *fn) {
         ld(&e, RCX, STKTOP, -VAL_SZ + 8, 1);
         st(&e, RAX, SLOTS, 0, 1);             /* slots[0] = result */
         st(&e, RCX, SLOTS, 8, 1);
-        e_lea(&e, R10, SLOTS, VAL_SZ);        /* vm.stackTop = slots + 1 */
-        movabs(&e, ADDR, (U64)(uintptr_t)&vm.stackTop);
+        e_lea(&e, R10, SLOTS, VAL_SZ);        /* vm->stackTop = slots + 1 */
+        movabs(&e, ADDR, (U64)(uintptr_t)&vm->stackTop);
         st(&e, R10, ADDR, 0, 1);
         mov_imm32(&e, RAX, 1);                /* return true */
         emit_restore_and_ret(&e);

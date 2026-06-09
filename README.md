@@ -5,16 +5,17 @@ language with a clean [HolyC](https://en.wikipedia.org/wiki/TempleOS#HolyC)-flav
 It is built primarily for its author's own use, with four design goals: **small, fast, robust,
 and easy to embed**.
 
-This is **v0.10**: a working bytecode VM with a precise, **generational** mark-sweep garbage
+This is **v0.11**: a working bytecode VM with a precise, **generational** mark-sweep garbage
 collector, aggregate types (arrays + classes/structs **with methods**), an opt-in
 **manual-memory** mode for low-level work, a **static type checker** that validates the HolyC type
 annotations before any code runs, **typed bytecode** that specializes the int hot path, a
 **baseline JIT** that compiles hot functions to native code (**arm64 + x86-64**, with a full
 interpreter fallback), a **standard library** (file I/O, strings, math), **string-keyed maps**,
-a **C embedding API** (register natives, exchange values, call brokm from C), and **multi-file
-programs** via `#include` — enough that a [compiler written in brokm](examples/realcc.bk) emits
-the VM's real bytecode and now **compiles its own source** (`make test-bootstrap`, byte-identical
-to the C compiler — see [docs/ROADMAP.md](docs/ROADMAP.md)).
+a **C embedding API** with **multi-instance VMs** (create any number of independent runtimes,
+register natives, exchange values, call brokm from C), and **multi-file programs** via
+`#include` — enough that a [compiler written in brokm](examples/realcc.bk) emits the VM's real
+bytecode and **compiles its own source** (`make test-bootstrap`, byte-identical to the C
+compiler — see [docs/ROADMAP.md](docs/ROADMAP.md)).
 
 ```holyc
 // hello.bk — top-level code runs; a bare string statement prints.
@@ -81,22 +82,25 @@ static BrokmValue HostAdd(int argc, const BrokmValue *args) {
 }
 
 int main(void) {
-  brokm_init();
-  brokm_register("HostAdd", HostAdd);              /* expose a C native */
-  brokm_eval("I64 Triple(I64 n) { return HostAdd(n, HostAdd(n, n)); }");
+  BrokmVM *vm = brokm_new();                       /* an independent runtime */
+  brokm_register(vm, "HostAdd", HostAdd);          /* expose a C native */
+  brokm_eval(vm, "I64 Triple(I64 n) { return HostAdd(n, HostAdd(n, n)); }");
 
   BrokmValue args[1] = { brokm_int(7) }, result;
-  brokm_call("Triple", 1, args, &result);          /* call brokm from C */
+  brokm_call(vm, "Triple", 1, args, &result);      /* call brokm from C */
   /* result == 21; also: brokm_get_global / brokm_set_global, string exchange */
 
-  brokm_shutdown();
+  brokm_free(vm);
   return 0;
 }
 ```
 
-The v0.9 API lets a host **register native functions**, **exchange values** (ints, floats, bools,
+The API is **instance-based** (v0.11): a host may create any number of independent VMs — each
+with its own heap, globals, interned strings, and GC — and use or destroy them in any order.
+It lets a host **register native functions** (per VM), **exchange values** (ints, floats, bools,
 strings), **read/set globals**, and **call brokm functions from C**. See
-[`examples/embed.c`](examples/embed.c) for a complete program (`make embed && ./embed-demo`).
+[`examples/embed.c`](examples/embed.c) for a complete program, including two VMs running side by
+side (`make embed && ./embed-demo`).
 
 ## Editor support
 
@@ -139,7 +143,9 @@ include-once, resolved relative to each file. Putting it together, **`examples/r
 compiler written in brokm** (lexer → parser → code generator) that emits the C VM's **real
 bytecode** and runs it directly — and it now **compiles its own complete source**: the
 self-compiled compiler produces byte-identical output to the C compiler (`make test-bootstrap`).
-Next up: a runtime in brokm and multi-instance VMs — see the roadmap.
+**Multi-instance VMs** (v0.11) made the runtime instance-based: any number of independent VMs per
+process, each with its own heap, globals, and collector. Next up: a portability/CI pass and
+bootstrap hardening — with a runtime in brokm as the long-term star. See the roadmap.
 
 ## License
 

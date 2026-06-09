@@ -39,6 +39,12 @@ typedef struct {
    * call boundary. */
   Value apiRoots[BK_API_ROOTS_MAX];
   int apiRootCount;
+
+  /* Host natives registered through the embedding API (brokm_register): name
+   * copies the type checker re-registers on every run of this VM. */
+  char **hostNatives;
+  int hostNativeCount;
+  int hostNativeCap;
 } VM;
 
 typedef enum {
@@ -47,12 +53,22 @@ typedef enum {
   BK_RUNTIME_ERROR
 } InterpretResult;
 
-/* Single VM instance for v0.1. Multi-instance embedding is a later milestone;
- * object.c and natives.c reference this global directly. */
-extern VM vm;
+/* The current VM instance (v0.11). The runtime is instance-based — create with
+ * vm_new(), destroy with vm_destroy() — but the interpreter, GC, allocator, and
+ * natives all act on this current-instance pointer rather than threading a
+ * parameter, so exactly one VM is active at a time. The public API (api.c)
+ * saves/restores it around every entry point, which makes nested cross-VM calls
+ * (a host native on VM A driving VM B) behave. One VM per *thread* would need
+ * this pointer to be thread-local and the JIT page pool to be per-VM or locked
+ * — out of scope for now. */
+extern VM *vm;
 
-void vm_init(void);
-void vm_free(void);
+/* Create a fresh, independent VM (own heap, globals, interned strings, GC) and
+ * make it current. Returns NULL on allocation failure. */
+VM *vm_new(void);
+/* Free target and everything it owns. If target was current, current becomes
+ * NULL. */
+void vm_destroy(VM *target);
 InterpretResult vm_interpret(const char *source);
 /* Like vm_interpret, but resolves relative `#include` paths against baseDir
  * (the directory of the file being run). */

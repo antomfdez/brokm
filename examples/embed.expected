@@ -1,7 +1,10 @@
-brokm 0.10.0 embedding demo
+brokm 0.11.0 embedding demo
 Triple(7) = 21
 Greet() = hello from C
 Hi(brokm) = hi brokm
 counter = 10
 after Bump = 15
 after set = 100
+vm A Get() = 10, vm B Get() = 20
+HostAdd visible: first vm=1, vm A=0
+after freeing A: B Get() = 20, first counter = 100

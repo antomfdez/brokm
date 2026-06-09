@@ -20,11 +20,11 @@
 #include "debug.h"
 #endif
 
-VM vm;
+VM *vm = NULL;
 
 static void reset_stack(void) {
-  vm.stackTop = vm.stack;
-  vm.frameCount = 0;
+  vm->stackTop = vm->stack;
+  vm->frameCount = 0;
 }
 
 static void runtime_error(const char *format, ...) {
@@ -34,8 +34,8 @@ static void runtime_error(const char *format, ...) {
   va_end(args);
   fputs("\n", stderr);
 
-  for (int i = vm.frameCount - 1; i >= 0; i--) {
-    CallFrame *frame = &vm.frames[i];
+  for (int i = vm->frameCount - 1; i >= 0; i--) {
+    CallFrame *frame = &vm->frames[i];
     ObjFunction *fn = frame->function;
     size_t instruction = (size_t)(frame->ip - fn->chunk.code - 1);
     fprintf(stderr, "[line %d] in %s\n", fn->chunk.lines[instruction],
@@ -44,40 +44,58 @@ static void runtime_error(const char *format, ...) {
   reset_stack();
 }
 
-void vm_push(Value value) { *vm.stackTop++ = value; }
-Value vm_pop(void) { return *(--vm.stackTop); }
-static Value peek(int distance) { return vm.stackTop[-1 - distance]; }
+void vm_push(Value value) { *vm->stackTop++ = value; }
+Value vm_pop(void) { return *(--vm->stackTop); }
+static Value peek(int distance) { return vm->stackTop[-1 - distance]; }
 
-void vm_init(void) {
+VM *vm_new(void) {
+  /* The instance itself is plain calloc'd memory, never GC-tracked: the
+   * allocator charges allocations to the *current* VM, which this one is about
+   * to become. */
+  VM *created = (VM *)calloc(1, sizeof(VM));
+  if (created == NULL) return NULL;
+  vm = created;
+
   reset_stack();
-  vm.objects = NULL;
+  vm->objects = NULL;
 
-  vm.gcEnabled = false; /* enabled once compilation is done */
-  vm.bytesAllocated = 0;
-  vm.nextGC = 1 << 20;
-  vm.bytesSinceMinor = 0;
-  vm.minorThreshold = 1 << 18; /* 256 KiB */
-  vm.grayCount = 0;
-  vm.grayCapacity = 0;
-  vm.grayStack = NULL;
-  vm.rememberedCount = 0;
-  vm.rememberedCapacity = 0;
-  vm.rememberedSet = NULL;
-  vm.apiRootCount = 0;
+  vm->gcEnabled = false; /* enabled once compilation is done */
+  vm->bytesAllocated = 0;
+  vm->nextGC = 1 << 20;
+  vm->bytesSinceMinor = 0;
+  vm->minorThreshold = 1 << 18; /* 256 KiB */
+  vm->grayCount = 0;
+  vm->grayCapacity = 0;
+  vm->grayStack = NULL;
+  vm->rememberedCount = 0;
+  vm->rememberedCapacity = 0;
+  vm->rememberedSet = NULL;
+  vm->apiRootCount = 0;
+  vm->hostNatives = NULL;
+  vm->hostNativeCount = 0;
+  vm->hostNativeCap = 0;
 
-  table_init(&vm.globals);
-  table_init(&vm.strings);
+  table_init(&vm->globals);
+  table_init(&vm->strings);
   natives_register();
   jit_init();
+  return created;
 }
 
-void vm_free(void) {
+void vm_destroy(VM *target) {
+  if (target == NULL) return;
+  VM *prev = vm;
+  vm = target; /* free the heap under its owner's accounting */
   jit_shutdown();
-  table_free(&vm.globals);
-  table_free(&vm.strings);
+  table_free(&vm->globals);
+  table_free(&vm->strings);
   objects_free_all();
-  free(vm.grayStack);
-  free(vm.rememberedSet);
+  free(vm->grayStack);
+  free(vm->rememberedSet);
+  for (int i = 0; i < target->hostNativeCount; i++) free(target->hostNatives[i]);
+  free(target->hostNatives);
+  vm = (prev == target) ? NULL : prev;
+  free(target);
 }
 
 void vm_define_native(const char *name, NativeFn fn) {
@@ -85,7 +103,7 @@ void vm_define_native(const char *name, NativeFn fn) {
   vm_push(OBJ_VAL(n));
   ObjNative *native = native_new(fn, n);
   vm_push(OBJ_VAL(native));
-  table_set(&vm.globals, n, OBJ_VAL(native));
+  table_set(&vm->globals, n, OBJ_VAL(native));
   vm_pop();
   vm_pop();
 }
@@ -98,28 +116,28 @@ static bool call_function(ObjFunction *fn, int argCount) {
   }
 #ifndef BK_NO_JIT
   /* Profile-gated JIT: compile once hot, then run the native code directly.
-   * Native functions do not use vm.frames — their generated epilogue leaves the
+   * Native functions do not use vm->frames — their generated epilogue leaves the
    * result on the value stack just as OP_RETURN would. */
   if (fn->nativeCode == NULL && !fn->jitDisabled &&
       ++fn->callCount >= jit_threshold()) {
     jit_try_compile(fn);
   }
   if (fn->nativeCode != NULL) {
-    if (vm.stackTop - vm.stack > BK_STACK_MAX - BK_SLOT_COUNT) {
+    if (vm->stackTop - vm->stack > BK_STACK_MAX - BK_SLOT_COUNT) {
       runtime_error("Stack overflow.");
       return false;
     }
-    return ((JitFn)fn->nativeCode)(vm.stackTop - argCount - 1);
+    return ((JitFn)fn->nativeCode)(vm->stackTop - argCount - 1);
   }
 #endif
-  if (vm.frameCount == BK_FRAMES_MAX) {
+  if (vm->frameCount == BK_FRAMES_MAX) {
     runtime_error("Stack overflow.");
     return false;
   }
-  CallFrame *frame = &vm.frames[vm.frameCount++];
+  CallFrame *frame = &vm->frames[vm->frameCount++];
   frame->function = fn;
   frame->ip = fn->chunk.code;
-  frame->slots = vm.stackTop - argCount - 1;
+  frame->slots = vm->stackTop - argCount - 1;
   return true;
 }
 
@@ -130,8 +148,8 @@ static bool call_value(Value callee, int argCount) {
         return call_function(AS_FUNCTION(callee), argCount);
       case OBJ_NATIVE: {
         NativeFn native = AS_NATIVE(callee)->fn;
-        Value result = native(argCount, vm.stackTop - argCount);
-        vm.stackTop -= argCount + 1;
+        Value result = native(argCount, vm->stackTop - argCount);
+        vm->stackTop -= argCount + 1;
         vm_push(result);
         return true;
       }
@@ -145,10 +163,10 @@ static bool call_value(Value callee, int argCount) {
         ObjInstance *inst = instance_new(klass);
         vm_push(OBJ_VAL(inst)); /* protect across field-table growth */
         for (int i = 0; i < klass->fieldCount; i++) {
-          Value v = (i < argCount) ? vm.stackTop[-1 - argCount + i] : NIL_VAL;
+          Value v = (i < argCount) ? vm->stackTop[-1 - argCount + i] : NIL_VAL;
           table_set(&inst->fields, klass->fields[i], v);
         }
-        vm.stackTop -= argCount + 2; /* drop inst, args, and callee */
+        vm->stackTop -= argCount + 2; /* drop inst, args, and callee */
         vm_push(OBJ_VAL(inst));
         return true;
       }
@@ -269,7 +287,7 @@ static bool do_binary(U8 op) {
  * count it saw before a bytecode callee was pushed, so it executes exactly that
  * nested call and returns control to the native code. */
 static InterpretResult run_until(int baseFrameCount) {
-  CallFrame *frame = &vm.frames[vm.frameCount - 1];
+  CallFrame *frame = &vm->frames[vm->frameCount - 1];
 
 #define READ_BYTE() (*frame->ip++)
 #define READ_SHORT() \
@@ -284,7 +302,7 @@ static InterpretResult run_until(int baseFrameCount) {
   for (;;) {
 #ifdef BK_DEBUG_TRACE_EXECUTION
     printf("          ");
-    for (Value *slot = vm.stack; slot < vm.stackTop; slot++) {
+    for (Value *slot = vm->stack; slot < vm->stackTop; slot++) {
       printf("[ ");
       value_print(*slot);
       printf(" ]");
@@ -304,14 +322,14 @@ static InterpretResult run_until(int baseFrameCount) {
 
       case OP_DEFINE_GLOBAL: {
         ObjString *name = READ_STRING();
-        table_set(&vm.globals, name, peek(0));
+        table_set(&vm->globals, name, peek(0));
         vm_pop();
         break;
       }
       case OP_GET_GLOBAL: {
         ObjString *name = READ_STRING();
         Value value;
-        if (!table_get(&vm.globals, name, &value)) {
+        if (!table_get(&vm->globals, name, &value)) {
           runtime_error("Undefined variable '%s'.", name->chars);
           return BK_RUNTIME_ERROR;
         }
@@ -320,8 +338,8 @@ static InterpretResult run_until(int baseFrameCount) {
       }
       case OP_SET_GLOBAL: {
         ObjString *name = READ_STRING();
-        if (table_set(&vm.globals, name, peek(0))) {
-          table_delete(&vm.globals, name);
+        if (table_set(&vm->globals, name, peek(0))) {
+          table_delete(&vm->globals, name);
           runtime_error("Undefined variable '%s'.", name->chars);
           return BK_RUNTIME_ERROR;
         }
@@ -485,7 +503,7 @@ static InterpretResult run_until(int baseFrameCount) {
       case OP_CALL: {
         int argCount = READ_BYTE();
         if (!call_value(peek(argCount), argCount)) return BK_RUNTIME_ERROR;
-        frame = &vm.frames[vm.frameCount - 1];
+        frame = &vm->frames[vm->frameCount - 1];
         break;
       }
       case OP_INVOKE: {
@@ -501,7 +519,7 @@ static InterpretResult run_until(int baseFrameCount) {
         if (table_get(&inst->fields, name, &field)) {
           /* A field holding a callable shadows methods: call it as an ordinary
            * value (receiver slot becomes the callable, no `this` binding). */
-          vm.stackTop[-argCount - 1] = field;
+          vm->stackTop[-argCount - 1] = field;
           if (!call_value(field, argCount)) return BK_RUNTIME_ERROR;
         } else {
           Value method;
@@ -515,22 +533,22 @@ static InterpretResult run_until(int baseFrameCount) {
             return BK_RUNTIME_ERROR;
           }
         }
-        frame = &vm.frames[vm.frameCount - 1];
+        frame = &vm->frames[vm->frameCount - 1];
         break;
       }
       case OP_PRINT: {
         int argCount = READ_BYTE();
-        bk_format(argCount, vm.stackTop - argCount);
-        vm.stackTop -= argCount;
+        bk_format(argCount, vm->stackTop - argCount);
+        vm->stackTop -= argCount;
         break;
       }
       case OP_ARRAY: {
         int n = READ_BYTE();
         ObjArray *array = array_new();
         vm_push(OBJ_VAL(array)); /* keep reachable while appending */
-        Value *base = vm.stackTop - n - 1;
+        Value *base = vm->stackTop - n - 1;
         for (int i = 0; i < n; i++) array_append(array, base[i]);
-        vm.stackTop = base; /* drop the n elements and the temp array slot */
+        vm->stackTop = base; /* drop the n elements and the temp array slot */
         vm_push(OBJ_VAL(array));
         break;
       }
@@ -621,20 +639,20 @@ static InterpretResult run_until(int baseFrameCount) {
       }
       case OP_RETURN: {
         Value result = vm_pop();
-        vm.frameCount--;
+        vm->frameCount--;
         /* The top-level <script> (the only nameless function) is discarded
          * whole; any other frame leaves its result for the caller — including an
          * embedded brokm_call whose callee is itself the outermost frame. */
-        if (vm.frameCount == 0 && frame->function->name == NULL) {
+        if (vm->frameCount == 0 && frame->function->name == NULL) {
           vm_pop(); /* the <script> function */
           return BK_OK;
         }
-        vm.stackTop = frame->slots;
+        vm->stackTop = frame->slots;
         vm_push(result);
-        if (vm.frameCount == baseFrameCount) {
+        if (vm->frameCount == baseFrameCount) {
           return BK_OK; /* re-entrant runner: hand the result back to the caller */
         }
-        frame = &vm.frames[vm.frameCount - 1];
+        frame = &vm->frames[vm->frameCount - 1];
         break;
       }
     }
@@ -651,7 +669,7 @@ static InterpretResult run_until(int baseFrameCount) {
 /* ---- JIT call-backs ----------------------------------------------------
  * Operations the JIT does not inline call these, which run the interpreter's
  * own logic on the same VM value stack as the matching opcodes. The generated
- * code flushes its cached stack-top to vm.stackTop before calling and reloads
+ * code flushes its cached stack-top to vm->stackTop before calling and reloads
  * it after. Each returns false (after reporting) on a runtime error. Declared
  * in jit.h; the generated code bakes their addresses. */
 
@@ -672,7 +690,7 @@ bool jit_h_equal(int negate) {
 
 bool jit_h_get_global(ObjString *name) {
   Value value;
-  if (!table_get(&vm.globals, name, &value)) {
+  if (!table_get(&vm->globals, name, &value)) {
     runtime_error("Undefined variable '%s'.", name->chars);
     return false;
   }
@@ -681,8 +699,8 @@ bool jit_h_get_global(ObjString *name) {
 }
 
 bool jit_h_set_global(ObjString *name) {
-  if (table_set(&vm.globals, name, peek(0))) {
-    table_delete(&vm.globals, name);
+  if (table_set(&vm->globals, name, peek(0))) {
+    table_delete(&vm->globals, name);
     runtime_error("Undefined variable '%s'.", name->chars);
     return false;
   }
@@ -690,9 +708,9 @@ bool jit_h_set_global(ObjString *name) {
 }
 
 bool jit_h_call(int argCount) {
-  int saved = vm.frameCount;
+  int saved = vm->frameCount;
   if (!call_value(peek(argCount), argCount)) return false;
-  if (vm.frameCount > saved) {
+  if (vm->frameCount > saved) {
     /* a bytecode frame was pushed: run exactly that nested call */
     return run_until(saved) == BK_OK;
   }
@@ -700,8 +718,8 @@ bool jit_h_call(int argCount) {
 }
 
 bool jit_h_print(int argCount) {
-  bk_format(argCount, vm.stackTop - argCount);
-  vm.stackTop -= argCount;
+  bk_format(argCount, vm->stackTop - argCount);
+  vm->stackTop -= argCount;
   return true;
 }
 #endif /* BK_NO_JIT */
@@ -710,7 +728,7 @@ static InterpretResult interpret(const char *source, const char *baseDir) {
   /* Parsing and compilation allocate objects (interned names, functions,
    * constants) that are not yet reachable from VM roots, so collection stays
    * off until the script is built and pushed. */
-  vm.gcEnabled = false;
+  vm->gcEnabled = false;
 
   StmtList program;
   bool ok = parse(source, baseDir, &program);
@@ -735,7 +753,7 @@ static InterpretResult interpret(const char *source, const char *baseDir) {
   vm_push(OBJ_VAL(script));
   call_function(script, 0);
 
-  vm.gcEnabled = true; /* the script and its constants are now rooted */
+  vm->gcEnabled = true; /* the script and its constants are now rooted */
   return run_until(0);
 }
 
@@ -750,18 +768,18 @@ InterpretResult vm_interpret_file(const char *source, const char *baseDir) {
 /* ---- embedding support (used by api.c) -------------------------------- */
 
 void vm_api_root(Value value) {
-  if (vm.apiRootCount < BK_API_ROOTS_MAX) vm.apiRoots[vm.apiRootCount++] = value;
+  if (vm->apiRootCount < BK_API_ROOTS_MAX) vm->apiRoots[vm->apiRootCount++] = value;
 }
 
-void vm_api_clear_roots(void) { vm.apiRootCount = 0; }
+void vm_api_clear_roots(void) { vm->apiRootCount = 0; }
 
 /* Call the value at peek(argCount) with the argCount values above it, then run
  * any bytecode frame it pushes to completion. The result is left on the stack.
  * Mirrors jit_h_call but is available in -DBK_NO_JIT builds. */
 InterpretResult vm_invoke(int argCount) {
-  vm.gcEnabled = true; /* globals/args on the stack are rooted */
-  int saved = vm.frameCount;
+  vm->gcEnabled = true; /* globals/args on the stack are rooted */
+  int saved = vm->frameCount;
   if (!call_value(peek(argCount), argCount)) return BK_RUNTIME_ERROR;
-  if (vm.frameCount > saved) return run_until(saved);
+  if (vm->frameCount > saved) return run_until(saved);
   return BK_OK; /* native / class produced the result directly */
 }

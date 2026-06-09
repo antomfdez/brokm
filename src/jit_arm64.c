@@ -9,7 +9,7 @@
  *
  * Conventions in generated code:
  *   x19 = slots base (the call frame: callee at slots[0], args follow)
- *   x20 = cached vm.stackTop; flushed to memory before any helper call and
+ *   x20 = cached vm->stackTop; flushed to memory before any helper call and
  *         reloaded after, since helpers push/pop. x9 is an address scratch,
  *         x0..x5/x16 are temporaries.
  * A Value is 16 bytes: the 4-byte type tag in the low word at offset 0, the
@@ -20,7 +20,7 @@
 
 #include <stdlib.h>
 
-#include "vm.h" /* the global `vm` (for &vm.stackTop) + value_truthy */
+#include "vm.h" /* the global `vm` (for &vm->stackTop) + value_truthy */
 
 /* ---- registers / conditions ------------------------------------------ */
 enum { X0 = 0, X1 = 1, X2 = 2, X3 = 3, X4 = 4, X5 = 5, X9 = 9, X16 = 16,
@@ -108,8 +108,8 @@ static void *publish(const U32 *code, int count) {
 }
 
 /* ---- emit helpers shared by the self-test and the walker -------------- */
-static void emit_flush_top(Emit *e) { e_mov_imm64(e, X9, (U64)(uintptr_t)&vm.stackTop); e_stur64(e, X20, X9, 0); }
-static void emit_reload_top(Emit *e) { e_mov_imm64(e, X9, (U64)(uintptr_t)&vm.stackTop); e_ldur64(e, X20, X9, 0); }
+static void emit_flush_top(Emit *e) { e_mov_imm64(e, X9, (U64)(uintptr_t)&vm->stackTop); e_stur64(e, X20, X9, 0); }
+static void emit_reload_top(Emit *e) { e_mov_imm64(e, X9, (U64)(uintptr_t)&vm->stackTop); e_ldur64(e, X20, X9, 0); }
 
 /* Push a 16-byte value already split into its two 64-bit words. */
 static void emit_push_words(Emit *e, int rWord0, int rWord1) {
@@ -123,7 +123,7 @@ static void compiled_prologue(Emit *e) {
   e_stp_pre(e, X29, X30, SP, -32);
   e_stp_off(e, X19, X20, SP, 16);
   e_mov_reg(e, X19, X0);          /* x19 = slots */
-  emit_reload_top(e);             /* x20 = vm.stackTop */
+  emit_reload_top(e);             /* x20 = vm->stackTop */
 }
 static void emit_restore_and_ret(Emit *e) {
   e_ldp_off(e, X19, X20, SP, 16);
@@ -330,8 +330,8 @@ static void *compile_chunk(ObjFunction *fn) {
         e_ldur64(&e, X1, X20, -VAL_SZ + 8);
         e_stur64(&e, X0, X19, 0);             /* slots[0] = result */
         e_stur64(&e, X1, X19, 8);
-        e_add_imm(&e, X2, X19, VAL_SZ);       /* vm.stackTop = slots + 1 */
-        e_mov_imm64(&e, X9, (U64)(uintptr_t)&vm.stackTop);
+        e_add_imm(&e, X2, X19, VAL_SZ);       /* vm->stackTop = slots + 1 */
+        e_mov_imm64(&e, X9, (U64)(uintptr_t)&vm->stackTop);
         e_stur64(&e, X2, X9, 0);
         e_movz(&e, X0, 1, 0);                 /* return true */
         emit_restore_and_ret(&e);

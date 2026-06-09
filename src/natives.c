@@ -315,14 +315,14 @@ static Value native_poke_ptr(int argc, Value *args) {
 static Value native_gc_disable(int argc, Value *args) {
   (void)argc;
   (void)args;
-  vm.gcEnabled = false;
+  vm->gcEnabled = false;
   return NIL_VAL;
 }
 
 static Value native_gc_enable(int argc, Value *args) {
   (void)argc;
   (void)args;
-  vm.gcEnabled = true;
+  vm->gcEnabled = true;
   return NIL_VAL;
 }
 
@@ -529,13 +529,13 @@ static Value native_assemble(int argc, Value *args) {
 static Value native_make_class(int argc, Value *args) {
   if (argc < 2 || !IS_STRING(args[0]) || !IS_ARRAY(args[1])) return NIL_VAL;
   ValueArray *fields = &AS_ARRAY(args[1])->elements;
-  bool savedGc = vm.gcEnabled;
-  vm.gcEnabled = false;
+  bool savedGc = vm->gcEnabled;
+  vm->gcEnabled = false;
   ObjClass *klass = class_new(AS_STRING(args[0]), fields->count);
   for (int i = 0; i < fields->count; i++) {
     if (IS_STRING(fields->values[i])) klass->fields[i] = AS_STRING(fields->values[i]);
   }
-  vm.gcEnabled = savedGc;
+  vm->gcEnabled = savedGc;
   return OBJ_VAL(klass);
 }
 

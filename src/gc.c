@@ -27,16 +27,16 @@ void mark_object(Obj *object) {
   if (object == NULL || object->mark) return;
   if (!gc_major && object->gen == GEN_OLD) return; /* minor: old gen is opaque */
   object->mark = 1;
-  if (vm.grayCapacity < vm.grayCount + 1) {
-    vm.grayCapacity = vm.grayCapacity < 8 ? 8 : vm.grayCapacity * 2;
-    vm.grayStack =
-        (Obj **)realloc(vm.grayStack, sizeof(Obj *) * (size_t)vm.grayCapacity);
-    if (vm.grayStack == NULL) {
+  if (vm->grayCapacity < vm->grayCount + 1) {
+    vm->grayCapacity = vm->grayCapacity < 8 ? 8 : vm->grayCapacity * 2;
+    vm->grayStack =
+        (Obj **)realloc(vm->grayStack, sizeof(Obj *) * (size_t)vm->grayCapacity);
+    if (vm->grayStack == NULL) {
       fprintf(stderr, "brokm: GC out of memory\n");
       exit(70);
     }
   }
-  vm.grayStack[vm.grayCount++] = object;
+  vm->grayStack[vm->grayCount++] = object;
 }
 
 void mark_value(Value value) {
@@ -50,17 +50,17 @@ void gc_write_barrier(Obj *owner, Value value) {
   if (owner == NULL || owner->gen != GEN_OLD) return;
   if (!IS_OBJ(value) || AS_OBJ(value)->gen != GEN_YOUNG) return;
 
-  if (vm.rememberedCapacity < vm.rememberedCount + 1) {
-    vm.rememberedCapacity =
-        vm.rememberedCapacity < 8 ? 8 : vm.rememberedCapacity * 2;
-    vm.rememberedSet = (Obj **)realloc(
-        vm.rememberedSet, sizeof(Obj *) * (size_t)vm.rememberedCapacity);
-    if (vm.rememberedSet == NULL) {
+  if (vm->rememberedCapacity < vm->rememberedCount + 1) {
+    vm->rememberedCapacity =
+        vm->rememberedCapacity < 8 ? 8 : vm->rememberedCapacity * 2;
+    vm->rememberedSet = (Obj **)realloc(
+        vm->rememberedSet, sizeof(Obj *) * (size_t)vm->rememberedCapacity);
+    if (vm->rememberedSet == NULL) {
       fprintf(stderr, "brokm: GC out of memory\n");
       exit(70);
     }
   }
-  vm.rememberedSet[vm.rememberedCount++] = owner;
+  vm->rememberedSet[vm->rememberedCount++] = owner;
 #else
   (void)owner;
   (void)value;
@@ -121,7 +121,7 @@ static void blacken_object(Obj *object) {
       for (int i = 0; i < map->table.capacity; i++) {
         Entry *entry = &map->table.entries[i];
         if (entry->key != NULL) {
-          mark_object((Obj *)entry->key); /* keys are strong, unlike vm.strings */
+          mark_object((Obj *)entry->key); /* keys are strong, unlike vm->strings */
           mark_value(entry->value);
         }
       }
@@ -143,25 +143,25 @@ static void mark_table(Table *table) {
 }
 
 static void mark_roots(void) {
-  for (Value *slot = vm.stack; slot < vm.stackTop; slot++) mark_value(*slot);
-  for (int i = 0; i < vm.frameCount; i++) {
-    mark_object((Obj *)vm.frames[i].function);
+  for (Value *slot = vm->stack; slot < vm->stackTop; slot++) mark_value(*slot);
+  for (int i = 0; i < vm->frameCount; i++) {
+    mark_object((Obj *)vm->frames[i].function);
   }
-  mark_table(&vm.globals);
-  for (int i = 0; i < vm.apiRootCount; i++) mark_value(vm.apiRoots[i]);
+  mark_table(&vm->globals);
+  for (int i = 0; i < vm->apiRootCount; i++) mark_value(vm->apiRoots[i]);
 
   /* For a minor collection, old objects are not scanned, so old objects known
    * to hold young references must be scanned for their young children. */
   if (!gc_major) {
-    for (int i = 0; i < vm.rememberedCount; i++) {
-      blacken_object(vm.rememberedSet[i]);
+    for (int i = 0; i < vm->rememberedCount; i++) {
+      blacken_object(vm->rememberedSet[i]);
     }
   }
 }
 
 static void trace_references(void) {
-  while (vm.grayCount > 0) {
-    Obj *object = vm.grayStack[--vm.grayCount];
+  while (vm->grayCount > 0) {
+    Obj *object = vm->grayStack[--vm->grayCount];
     blacken_object(object);
   }
 }
@@ -181,7 +181,7 @@ static void table_remove_white(Table *table) {
 /* ---- sweep ------------------------------------------------------------- */
 
 static void sweep(void) {
-  Obj **link = &vm.objects;
+  Obj **link = &vm->objects;
   while (*link != NULL) {
     Obj *object = *link;
     if (object->mark) {
@@ -201,32 +201,32 @@ static void sweep(void) {
 /* ---- driver ------------------------------------------------------------ */
 
 void collect_garbage(bool major) {
-  if (!vm.gcEnabled) return;
+  if (!vm->gcEnabled) return;
   gc_major = major;
 
 #ifdef BK_DEBUG_LOG_GC
   printf("-- gc begin (%s)\n", major ? "major" : "minor");
-  size_t before = vm.bytesAllocated;
+  size_t before = vm->bytesAllocated;
 #endif
 
   mark_roots();
   trace_references();
-  table_remove_white(&vm.strings);
+  table_remove_white(&vm->strings);
   sweep();
 
   /* Only a minor collection promotes its young survivors, dissolving the
    * recorded old->young edges into old->old; a major leaves the set intact. */
-  if (!major) vm.rememberedCount = 0;
-  vm.bytesSinceMinor = 0;
+  if (!major) vm->rememberedCount = 0;
+  vm->bytesSinceMinor = 0;
 
   if (major) {
-    vm.nextGC = vm.bytesAllocated * GC_HEAP_GROW_FACTOR;
-    if (vm.nextGC < GC_HEAP_MIN) vm.nextGC = GC_HEAP_MIN;
+    vm->nextGC = vm->bytesAllocated * GC_HEAP_GROW_FACTOR;
+    if (vm->nextGC < GC_HEAP_MIN) vm->nextGC = GC_HEAP_MIN;
   }
 
 #ifdef BK_DEBUG_LOG_GC
   printf("-- gc end   (%s: collected %zu bytes, %zu live, nextGC %zu)\n",
-         major ? "major" : "minor", before - vm.bytesAllocated,
-         vm.bytesAllocated, vm.nextGC);
+         major ? "major" : "minor", before - vm->bytesAllocated,
+         vm->bytesAllocated, vm->nextGC);
 #endif
 }

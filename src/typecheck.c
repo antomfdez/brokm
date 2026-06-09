@@ -11,9 +11,12 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <stdlib.h>
+
 #include "memory.h"
 #include "object.h"
 #include "typecheck.h"
+#include "vm.h" /* per-VM host-native registry */
 
 /* ---- state ------------------------------------------------------------ */
 
@@ -167,25 +170,32 @@ static bool class_has_method(TcClass *cls, ObjString *name) {
   return false;
 }
 
-/* Host natives registered through the embedding API (brokm_register). Persists
- * across typecheck() runs, unlike the per-run tc registries. */
-static char **hostNatives = NULL;
-static int hostNativeCount = 0;
-static int hostNativeCap = 0;
-
+/* Host natives registered through the embedding API (brokm_register). Stored
+ * per VM (a native registered on one instance must not typecheck on another)
+ * and persists across that VM's typecheck() runs, unlike the per-run tc
+ * registries. Plain malloc/realloc — host-side metadata the GC never sees;
+ * vm_destroy frees it with free(). */
 void typecheck_register_native(const char *name) {
-  for (int i = 0; i < hostNativeCount; i++) {
-    if (strcmp(hostNatives[i], name) == 0) return; /* already known */
+  for (int i = 0; i < vm->hostNativeCount; i++) {
+    if (strcmp(vm->hostNatives[i], name) == 0) return; /* already known */
   }
-  if (hostNativeCap < hostNativeCount + 1) {
-    int old = hostNativeCap;
-    hostNativeCap = GROW_CAPACITY(old);
-    hostNatives = GROW_ARRAY(char *, hostNatives, old, hostNativeCap);
+  if (vm->hostNativeCap < vm->hostNativeCount + 1) {
+    vm->hostNativeCap = vm->hostNativeCap < 8 ? 8 : vm->hostNativeCap * 2;
+    vm->hostNatives = (char **)realloc(
+        vm->hostNatives, sizeof(char *) * (size_t)vm->hostNativeCap);
+    if (vm->hostNatives == NULL) {
+      fprintf(stderr, "brokm: out of memory\n");
+      exit(70);
+    }
   }
   size_t len = strlen(name);
-  char *copy = ALLOCATE(char, len + 1);
+  char *copy = (char *)malloc(len + 1);
+  if (copy == NULL) {
+    fprintf(stderr, "brokm: out of memory\n");
+    exit(70);
+  }
   memcpy(copy, name, len + 1);
-  hostNatives[hostNativeCount++] = copy;
+  vm->hostNatives[vm->hostNativeCount++] = copy;
 }
 
 static void register_natives(void) {
@@ -210,9 +220,10 @@ static void register_natives(void) {
     ObjString *name = string_copy(NAMES[i], (int)strlen(NAMES[i]));
     register_func(name, ty(TY_UNKNOWN), NULL, 0, true);
   }
-  /* Host natives from the embedding API, same gradual treatment. */
-  for (int i = 0; i < hostNativeCount; i++) {
-    ObjString *name = string_copy(hostNatives[i], (int)strlen(hostNatives[i]));
+  /* This VM's host natives from the embedding API, same gradual treatment. */
+  for (int i = 0; i < vm->hostNativeCount; i++) {
+    ObjString *name =
+        string_copy(vm->hostNatives[i], (int)strlen(vm->hostNatives[i]));
     register_func(name, ty(TY_UNKNOWN), NULL, 0, true);
   }
 }
