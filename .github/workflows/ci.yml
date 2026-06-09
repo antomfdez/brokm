@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # macos-latest = arm64 (Apple Silicon); ubuntu-latest = x86-64.
+        # Together they cover both JIT backends on both supported OSes' APIs.
+        os: [macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build (warnings are errors)
+        run: make CFLAGS="-std=c99 -Wall -Wextra -Werror -O2 -Iinclude -Isrc"
+
+      - name: Test (default build)
+        run: make test
+
+      - name: Test (forced JIT)
+        run: BROKM_JIT_THRESHOLD=1 make test
+
+      - name: Test (GC stress)
+        run: make test-gc
+
+      - name: Test (no JIT)
+        run: |
+          make clean
+          make CFLAGS="-std=c99 -Wall -Wextra -Werror -O2 -Iinclude -Isrc -DBK_NO_JIT"
+          bash tests/run_tests.sh
+
+      - name: Embedding + self-hosting checks
+        run: |
+          make clean
+          make
+          make test-embed test-selfcompile test-bootstrap

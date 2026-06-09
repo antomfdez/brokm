@@ -136,7 +136,7 @@ red/green: dropping the `IS_INT` check makes the float-in-int-slot case in
 builds produce byte-identical output. Equality (`== !=`, any-value) and bitwise/shift (already
 integer-only generic paths) are not specialized — an easy future extension.
 
-## v0.5 — Baseline JIT ✅ (done, arm64 + x86-64 / macOS)
+## v0.5 — Baseline JIT ✅ (done, arm64 + x86-64 / macOS; Linux added in v0.11.1)
 
 Hot functions are compiled to native code in `mmap`'d executable pages
 (`MAP_JIT` + `pthread_jit_write_protect_np`), profile-gated, with a full interpreter fallback.
@@ -172,9 +172,10 @@ function runs on the interpreter.
   **Speedup:** `make bench` (Fib(34)) — arm64 ~2× (≈303→153 ms); x86-64 ~2.4× (≈551→231 ms under
   Rosetta), each vs its own `-DBK_NO_JIT` build.
 
-**Deferred (v0.5.x):** a **Linux** x64 path (plain `PROT_EXEC` mmap, no `MAP_JIT`); JIT'd frames
-in the error backtrace (native frames currently omit their backtrace line); inlining bitwise/unary
-ops and aggregates; keeping the cached stack-top in a register across calls.
+**Deferred (v0.5.x):** a **Linux** path — **done in v0.11.1** (plain RWX mmap, no `MAP_JIT`;
+`__builtin___clear_cache` instead of `sys_icache_invalidate`); JIT'd frames in the error
+backtrace (native frames currently omit their backtrace line); inlining bitwise/unary ops and
+aggregates; keeping the cached stack-top in a register across calls.
 
 ## v0.6 — Standard library ✅ (done) · embedding/polish (in progress)
 
@@ -326,6 +327,33 @@ order. This closes the embedding gap deferred at every milestone since v0.5.
 **Scope note:** the runtime stays single-threaded — VMs interleave freely on one thread, but one
 VM per *thread* would additionally need a thread-local current pointer and a per-VM (or locked)
 JIT page pool.
+
+## v0.11.1 — Portability + CI ✅ (done)
+
+"Portable" was a stated goal that had only ever been verified on one machine. brokm now builds
+and passes its **entire matrix on Linux** — both JIT backends included — and a **GitHub Actions
+workflow** (`.github/workflows/ci.yml`) checks it on every push: macOS arm64 + Linux x86-64,
+building with **`-Werror`**, running the suite four ways (default / forced JIT / `-DBK_NO_JIT` /
+GC stress) plus the embedding, self-compile, and bootstrap checks.
+
+- **Linux JIT.** `BK_JIT_ENABLED` now covers Linux: the page pool takes a plain RWX anonymous
+  mapping (no `MAP_JIT`, no per-thread write-protect toggle) and flushes the instruction cache
+  with `__builtin___clear_cache` (a no-op on x86-64, required on arm64). The arm64 and x86-64
+  encoders/walkers needed **zero changes** — all platform specifics were already confined to the
+  shared pool in `jit.c`.
+- **glibc strictness.** Two small fixes: `realpath(3)` needs `_XOPEN_SOURCE` under `-std=c99`
+  (lexer.c), and `MAP_ANONYMOUS` needs `_DEFAULT_SOURCE` (jit.c); gcc's `-Wformat-truncation`
+  flagged the `#include`-path join buffer, now sized so the join can never truncate.
+- **A real GC bug, caught by porting.** The Linux suite crashed under GC stress where macOS had
+  always passed: `Assemble`'s `fn->name = string_copy("<asm>")` stores a fresh **young** string
+  into a function that the interning allocation itself may have **promoted to old** — a raw
+  old→young edge with no write barrier. The weakly-interned name was swept on the next minor
+  collection and `fn->name` dangled; macOS malloc left the freed block intact (silently
+  "working"), glibc reused it (segfault), and **AddressSanitizer on Linux** pinpointed it. One
+  `gc_write_barrier` call fixes it — the same pattern every other old→young store site already
+  used. The whole suite now runs **ASan-clean under stress GC** on Linux.
+- **Verified.** macOS arm64 + x86-64 (Rosetta): full matrix. Linux arm64 + x86-64 (containers):
+  full matrix with `-Werror`, plus the ASan/stress sweep. CI runs the same steps on every push.
 
 ## Self-hosting (north star)
 
@@ -549,18 +577,10 @@ Can brokm compile itself? Eventually, yes — and brokm now hosts the front-end 
 
 ## What's next
 
-With the bootstrap and multi-instance VMs done, the priorities shift to proving the remaining
-goals: "portable" has only ever been verified on one machine. In order:
+With the bootstrap, multi-instance VMs, and portability/CI done, what remains is hardening and
+the long-tail features. In order:
 
-### Portability + CI (next up)
-
-"Portable" is a stated goal, but nothing is verified off this machine: the Linux build is
-untested, the Linux x64 JIT path is unwritten (plain `PROT_EXEC` mmap, no `MAP_JIT`), and there is
-no CI. A GitHub Actions matrix (macOS arm64 + Linux x64) running `make test` four ways plus
-`test-embed` / `test-selfcompile` / `test-bootstrap` turns "0 warnings, all tests green" from a
-local claim into a checked invariant on every push.
-
-### Hardening + deferred fixes
+### Hardening + deferred fixes (next up)
 
 - **Three-stage fixpoint:** have the self-compiled realcc re-compile realcc and diff the
   generated bytecode against the stage-1 output — the classic compiler-bootstrap closure test

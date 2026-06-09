@@ -4,6 +4,10 @@
  * resolved in the lexer via a stack of source frames, so the parser sees one
  * continuous token stream. Includes resolve relative to the including file's
  * directory and are processed once per file (include-once / cycle-safe). */
+#ifdef __linux__
+#define _XOPEN_SOURCE 700 /* realpath(3) from <stdlib.h> under -std=c99 */
+#endif
+
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -296,7 +300,9 @@ static bool handle_include(Token *err) {
   memcpy(rel, p, (size_t)plen);
   rel[plen] = '\0';
 
-  char joined[PATH_MAX];
+  /* Sized for dir + '/' + rel so the join can never truncate (realpath then
+   * bounds the canonical result to PATH_MAX). */
+  char joined[PATH_MAX * 2];
   if (rel[0] == '/') {
     snprintf(joined, sizeof(joined), "%s", rel);
   } else {

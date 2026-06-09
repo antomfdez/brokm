@@ -508,6 +508,12 @@ static Value native_assemble(int argc, Value *args) {
   vm_push(OBJ_VAL(fn)); /* root across name interning + chunk growth */
   fn->arity = (argc >= 3 && IS_INT(args[2])) ? (int)AS_INT(args[2]) : 0;
   fn->name = string_copy("<asm>", 5);
+  /* string_copy may collect, promoting the rooted fn to the old generation
+   * before the fresh (young) name is stored into it — a raw old->young edge
+   * the minor GC can only see through the remembered set. Without this
+   * barrier the weakly-interned name is swept and fn->name dangles (caught
+   * by ASan on Linux; macOS malloc masked it). */
+  gc_write_barrier((Obj *)fn, OBJ_VAL(fn->name));
   for (int i = 0; i < consts->count; i++) {
     chunk_add_constant(&fn->chunk, consts->values[i]);
   }

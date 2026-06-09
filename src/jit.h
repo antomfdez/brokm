@@ -1,9 +1,10 @@
 /* jit.h - baseline JIT (v0.5): compile hot functions to native code.
  *
  * The JIT is profile-gated and falls back to the bytecode interpreter for any
- * function it cannot (or chooses not to) compile. The real code generator is
- * arm64/macOS only; on other platforms (or with -DBK_NO_JIT) the entry points
- * are no-ops and every function runs on the interpreter. */
+ * function it cannot (or chooses not to) compile. Code generators exist for
+ * arm64 and x86-64 on macOS and Linux; on other platforms (or with
+ * -DBK_NO_JIT) the entry points are no-ops and every function runs on the
+ * interpreter. */
 #ifndef BROKM_JIT_H
 #define BROKM_JIT_H
 
@@ -16,8 +17,8 @@
  * CallFrame.slots. Returns false on a runtime error (already reported). */
 typedef bool (*JitFn)(Value *slots);
 
-#if (defined(__aarch64__) || defined(__x86_64__)) && defined(__APPLE__) && \
-    !defined(BK_NO_JIT)
+#if (defined(__aarch64__) || defined(__x86_64__)) && \
+    (defined(__APPLE__) || defined(__linux__)) && !defined(BK_NO_JIT)
 #define BK_JIT_ENABLED 1
 #endif
 

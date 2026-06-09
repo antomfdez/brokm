@@ -124,7 +124,7 @@ checker** validates the type annotations between parse and compile — catching 
 field, and class-type errors before execution — using gradual typing so existing programs are
 unaffected. The compiler emits **typed bytecode**: int-specialized arithmetic and comparison
 opcodes on the hot path, with a runtime guard that deopts to the generic handler so gradual
-typing stays correct. A **baseline JIT** (macOS, **arm64 + x86-64**) compiles hot functions to
+typing stays correct. A **baseline JIT** (macOS + Linux, **arm64 + x86-64**) compiles hot functions to
 native code in `mmap`'d executable pages — profile-gated, with inlined integer
 arithmetic/comparisons, branches, and recursion, deopt guards for correctness, and a full
 interpreter fallback for ineligible functions and every other platform. It runs the recursive
@@ -144,8 +144,10 @@ compiler written in brokm** (lexer → parser → code generator) that emits the
 bytecode** and runs it directly — and it now **compiles its own complete source**: the
 self-compiled compiler produces byte-identical output to the C compiler (`make test-bootstrap`).
 **Multi-instance VMs** (v0.11) made the runtime instance-based: any number of independent VMs per
-process, each with its own heap, globals, and collector. Next up: a portability/CI pass and
-bootstrap hardening — with a runtime in brokm as the long-term star. See the roadmap.
+process, each with its own heap, globals, and collector. **Portability + CI** (v0.11.1) brought
+the full matrix — including both JIT backends — to **Linux**, verified by a GitHub Actions matrix
+(macOS arm64 + Linux x86-64, warnings as errors) on every push. Next up: bootstrap hardening —
+with a runtime in brokm as the long-term star. See the roadmap.
 
 ## License
 

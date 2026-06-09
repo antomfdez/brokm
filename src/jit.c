@@ -3,6 +3,10 @@
  * arm64 and x86-64 backends. The encoders and bytecode walkers live in
  * jit_arm64.c and jit_x64.c (selected by the target arch); they plug in through
  * jit_compile_arch / jit_selftest_arch and allocate code via jit_pool_publish. */
+#ifdef __linux__
+#define _DEFAULT_SOURCE /* MAP_ANONYMOUS from <sys/mman.h> under -std=c99 */
+#endif
+
 #include <limits.h>
 #include <stddef.h>
 #include <stdlib.h>
@@ -27,13 +31,20 @@ int jit_threshold(void) {
 
 #ifdef BK_JIT_ENABLED
 
-#include <libkern/OSCacheControl.h>
-#include <pthread.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/mman.h>
 
+#ifdef __APPLE__
+#include <libkern/OSCacheControl.h>
+#include <pthread.h>
+#endif
+
 #include "value.h"
+
+#ifndef MAP_ANONYMOUS
+#define MAP_ANONYMOUS MAP_ANON /* the BSD/macOS spelling */
+#endif
 
 /* ---- executable page pool -------------------------------------------- */
 typedef struct Region {
@@ -49,8 +60,13 @@ static bool g_jitUsable = false;
 static Region *region_new(size_t need) {
   size_t size = 1u << 16; /* 64 KiB */
   if (need > size) size = (need + 0xFFFu) & ~(size_t)0xFFFu;
-  void *base = mmap(NULL, size, PROT_READ | PROT_WRITE | PROT_EXEC,
-                    MAP_PRIVATE | MAP_ANON | MAP_JIT, -1, 0);
+  /* macOS requires MAP_JIT (paired with the per-thread write-protect toggle in
+   * jit_pool_publish); Linux takes a plain RWX anonymous mapping. */
+  int flags = MAP_PRIVATE | MAP_ANONYMOUS;
+#ifdef MAP_JIT
+  flags |= MAP_JIT;
+#endif
+  void *base = mmap(NULL, size, PROT_READ | PROT_WRITE | PROT_EXEC, flags, -1, 0);
   if (base == MAP_FAILED) return NULL;
   Region *r = (Region *)malloc(sizeof(Region));
   if (r == NULL) { munmap(base, size); return NULL; }
@@ -70,10 +86,16 @@ void *jit_pool_publish(const void *code, size_t bytes) {
     if (r == NULL) return NULL;
   }
   void *dst = r->base + r->used;
+#ifdef __APPLE__
   pthread_jit_write_protect_np(0);
   memcpy(dst, code, bytes);
   pthread_jit_write_protect_np(1);
   sys_icache_invalidate(dst, bytes);
+#else
+  memcpy(dst, code, bytes);
+  /* x86-64 has a coherent icache (this is a no-op there); arm64 needs it. */
+  __builtin___clear_cache((char *)dst, (char *)dst + bytes);
+#endif
   r->used += (bytes + 15u) & ~(size_t)15u; /* keep 16-byte alignment */
   return dst;
 }
