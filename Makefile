@@ -97,12 +97,14 @@ test-fixpoint: $(BIN)
 	  echo "fixpoint: FAIL"; echo "$$out"; exit 1; \
 	fi
 
-# Benchmark the JIT against the interpreter on a recursion-heavy program.
+# Benchmark the three execution tiers on a recursion-heavy program.
 bench:
 	$(CC) $(CFLAGS) -o /tmp/brokm-jit $(SRC) $(LDFLAGS)
 	$(CC) $(CFLAGS) -DBK_NO_JIT -o /tmp/brokm-nojit $(SRC) $(LDFLAGS)
+	BROKM_HOME="$(CURDIR)" /tmp/brokm-jit build bench/fib.bk -o /tmp/brokm-fib-aot --quiet
 	@echo "interpreter:"; time /tmp/brokm-nojit bench/fib.bk
 	@echo "JIT:";         time /tmp/brokm-jit   bench/fib.bk
+	@echo "AOT:";         time /tmp/brokm-fib-aot
 
 clean:
 	rm -f $(OBJ) $(DEP) $(BIN) embed-demo

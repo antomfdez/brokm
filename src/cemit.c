@@ -259,6 +259,7 @@ static bool emit_fn_body(FILE *out, Graph *g, int id) {
   fprintf(out, "/* ---- %s (arity %d) ---- */\n",
           fn->name ? fn->name->chars : "<script>", fn->arity);
   fprintf(out, "static bool bk_f%d(Value *slots) {\n", id);
+  fputs("  Value *sp = vm->stackTop;\n", out);
   if (c->constants.count > 0) {
     fprintf(out, "  const Value *K = g_f%d->chunk.constants.values;\n", id);
   }
@@ -282,7 +283,9 @@ static bool emit_fn_body(FILE *out, Graph *g, int id) {
       } else {
         fprintf(out, "    PUSH(INT_VAL(AS_INT(a) %s AS_INT(b)));\n", t.cop);
       }
-      fprintf(out, "  } else if (!jit_h_binary(%s)) return false;\n",
+      fprintf(out,
+              "  } else { FLUSH(); if (!jit_h_binary(%s)) return false; "
+              "RELOAD(); }\n",
               generic_op_name(t.generic));
       continue;
     }
@@ -297,14 +300,19 @@ static bool emit_fn_body(FILE *out, Graph *g, int id) {
       case OP_POP: fputs("  (void)POP();\n", out); break;
 
       case OP_DEFINE_GLOBAL:
-        fprintf(out, "  jit_h_define_global(AS_STRING(K[%d]));\n", c->code[o + 1]);
+        fprintf(out, "  FLUSH(); jit_h_define_global(AS_STRING(K[%d])); RELOAD();\n",
+                c->code[o + 1]);
         break;
       case OP_GET_GLOBAL:
-        fprintf(out, "  if (!jit_h_get_global(AS_STRING(K[%d]))) return false;\n",
+        fprintf(out,
+                "  FLUSH(); if (!jit_h_get_global(AS_STRING(K[%d]))) return false; "
+                "RELOAD();\n",
                 c->code[o + 1]);
         break;
       case OP_SET_GLOBAL:
-        fprintf(out, "  if (!jit_h_set_global(AS_STRING(K[%d]))) return false;\n",
+        fprintf(out,
+                "  FLUSH(); if (!jit_h_set_global(AS_STRING(K[%d]))) return false; "
+                "RELOAD();\n",
                 c->code[o + 1]);
         break;
       case OP_GET_LOCAL:
@@ -314,8 +322,12 @@ static bool emit_fn_body(FILE *out, Graph *g, int id) {
         fprintf(out, "  slots[%d] = PEEK(0);\n", c->code[o + 1]);
         break;
 
-      case OP_EQUAL: fputs("  jit_h_equal(0);\n", out); break;
-      case OP_NOT_EQUAL: fputs("  jit_h_equal(1);\n", out); break;
+      case OP_EQUAL:
+        fputs("  FLUSH(); jit_h_equal(0); RELOAD();\n", out);
+        break;
+      case OP_NOT_EQUAL:
+        fputs("  FLUSH(); jit_h_equal(1); RELOAD();\n", out);
+        break;
 
       case OP_ADD:
       case OP_SUB:
@@ -332,14 +344,19 @@ static bool emit_fn_body(FILE *out, Graph *g, int id) {
       case OP_SHL:
       case OP_SHR:
         gname = generic_op_name(op);
-        fprintf(out, "  if (!jit_h_binary(%s)) return false;\n", gname);
+        fprintf(out, "  FLUSH(); if (!jit_h_binary(%s)) return false; RELOAD();\n",
+                gname);
         break;
 
-      case OP_NEGATE: fputs("  if (!jit_h_negate()) return false;\n", out); break;
+      case OP_NEGATE:
+        fputs("  FLUSH(); if (!jit_h_negate()) return false; RELOAD();\n", out);
+        break;
       case OP_NOT:
         fputs("  PUSH(BOOL_VAL(!value_truthy(POP())));\n", out);
         break;
-      case OP_BIT_NOT: fputs("  if (!jit_h_bit_not()) return false;\n", out); break;
+      case OP_BIT_NOT:
+        fputs("  FLUSH(); if (!jit_h_bit_not()) return false; RELOAD();\n", out);
+        break;
 
       case OP_JUMP:
         fprintf(out, "  goto L_%04d;\n", jump_target(c->code, o));
@@ -356,39 +373,66 @@ static bool emit_fn_body(FILE *out, Graph *g, int id) {
         fprintf(out, "  goto L_%04d;\n", jump_target(c->code, o));
         break;
 
-      case OP_CALL:
-        fprintf(out, "  if (!jit_h_call(%d)) return false;\n", c->code[o + 1]);
+      case OP_CALL: {
+        /* Fast path (v0.14): an AOT-compiled callee with matching arity is
+         * invoked directly, skipping jit_h_call -> call_value dispatch. Any
+         * other case — wrong arity, no native code, non-function callee, or
+         * a stack near its limit — falls back to jit_h_call, whose
+         * call_function reproduces the exact checks and error messages
+         * (call_function's own native dispatch is what this inlines). */
+        int argc = c->code[o + 1];
+        fprintf(out,
+                "  { FLUSH(); Value cal = PEEK(%d);\n"
+                "    if (IS_FUNCTION(cal) && AS_FUNCTION(cal)->nativeCode != NULL"
+                " &&\n"
+                "        AS_FUNCTION(cal)->arity == %d &&\n"
+                "        vm->stackTop - vm->stack <= BK_STACK_MAX - BK_SLOT_COUNT)"
+                " {\n"
+                "      if (!((JitFn)AS_FUNCTION(cal)->nativeCode)(vm->stackTop - "
+                "%d)) return false;\n"
+                "    } else if (!jit_h_call(%d)) return false;\n"
+                "    RELOAD(); }\n",
+                argc, argc, argc + 1, argc);
         break;
+      }
       case OP_INVOKE:
-        fprintf(out, "  if (!jit_h_invoke(AS_STRING(K[%d]), %d)) return false;\n",
+        fprintf(out,
+                "  FLUSH(); if (!jit_h_invoke(AS_STRING(K[%d]), %d)) return "
+                "false; RELOAD();\n",
                 c->code[o + 1], c->code[o + 2]);
         break;
       case OP_PRINT:
-        fprintf(out, "  jit_h_print(%d);\n", c->code[o + 1]);
+        fprintf(out, "  FLUSH(); jit_h_print(%d); RELOAD();\n", c->code[o + 1]);
         break;
 
       case OP_ARRAY:
-        fprintf(out, "  jit_h_array(%d);\n", c->code[o + 1]);
+        fprintf(out, "  FLUSH(); jit_h_array(%d); RELOAD();\n", c->code[o + 1]);
         break;
       case OP_INDEX_GET:
-        fputs("  if (!jit_h_index_get()) return false;\n", out);
+        fputs("  FLUSH(); if (!jit_h_index_get()) return false; RELOAD();\n", out);
         break;
       case OP_INDEX_SET:
-        fputs("  if (!jit_h_index_set()) return false;\n", out);
+        fputs("  FLUSH(); if (!jit_h_index_set()) return false; RELOAD();\n", out);
         break;
       case OP_GET_FIELD:
-        fprintf(out, "  if (!jit_h_get_field(AS_STRING(K[%d]))) return false;\n",
+        fprintf(out,
+                "  FLUSH(); if (!jit_h_get_field(AS_STRING(K[%d]))) return false; "
+                "RELOAD();\n",
                 c->code[o + 1]);
         break;
       case OP_SET_FIELD:
-        fprintf(out, "  if (!jit_h_set_field(AS_STRING(K[%d]))) return false;\n",
+        fprintf(out,
+                "  FLUSH(); if (!jit_h_set_field(AS_STRING(K[%d]))) return false; "
+                "RELOAD();\n",
                 c->code[o + 1]);
         break;
 
       case OP_RETURN:
         /* Same epilogue as the interpreter's OP_RETURN for a callee frame:
-         * discard the window, leave the result for the caller. */
-        fputs("  { Value r = POP(); vm->stackTop = slots; PUSH(r); return true; }\n",
+         * discard the window, leave the result for the caller (and publish
+         * the new top — the caller RELOADs after the call). */
+        fputs("  { Value r = POP(); slots[0] = r; vm->stackTop = slots + 1; "
+              "return true; }\n",
               out);
         break;
 
@@ -415,9 +459,16 @@ bool cemit_program(ObjFunction *script, FILE *out) {
 
   fputs("/* Generated by brokm build -- do not edit. */\n", out);
   fputs("#include <stdio.h>\n\n#include \"jit.h\"\n#include \"natives.h\"\n#include \"vm.h\"\n\n", out);
-  fputs("static inline void PUSH(Value v) { *vm->stackTop++ = v; }\n", out);
-  fputs("static inline Value POP(void) { return *(--vm->stackTop); }\n", out);
-  fputs("static inline Value PEEK(int d) { return vm->stackTop[-1 - d]; }\n\n", out);
+  /* v0.14: the stack pointer is cached in a C local (`sp`) per function, the
+   * same discipline as the JIT's cached register: pure stack ops touch only
+   * sp, and FLUSH/RELOAD bracket every jit_h_* helper call (helpers read and
+   * write vm->stackTop, including re-entering other bk_f functions). */
+  fputs("#define PUSH(v) (*sp++ = (v))\n"
+        "#define POP() (*(--sp))\n"
+        "#define PEEK(d) (sp[-1 - (d)])\n"
+        "#define FLUSH() (vm->stackTop = sp)\n"
+        "#define RELOAD() (sp = vm->stackTop)\n\n",
+        out);
 
   for (int i = 0; i < g.fnCount; i++) {
     fprintf(out, "static ObjFunction *g_f%d; /* %s */\n", i,
