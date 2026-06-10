@@ -48,7 +48,9 @@ attach cleanly later — so it earns its keep.
 | `debug.c` | bytecode disassembler |
 | `natives.c` | the native stdlib — printf formatter, I/O, strings, math, maps, manual memory, JIT bridge |
 | `api.c` | public `brokm.h` implementation (value exchange, host natives, calls; v0.9) |
-| `main.c` | CLI / REPL |
+| `cemit.c` | AOT back-end: bytecode chunks → C source (v0.12) |
+| `aot.c` | `brokm build` driver: front-end, emission, cc invocation, runtime discovery (v0.12) |
+| `main.c` | CLI (`run` / `build` subcommands) / REPL |
 
 ## Value representation
 
@@ -85,6 +87,27 @@ table; locals are slot indices into the current frame. Strings are interned, so 
 and variable-name resolution are pointer comparisons.
 
 Dispatch is a portable `switch`. A computed-goto fast path can be added behind a macro later.
+
+## Three execution tiers, one semantics
+
+A function body can execute three ways, and all three run on the **same VM value stack**
+through the **same runtime helpers** (`jit_h_*`, defined in `vm.c`):
+
+1. **Interpreter** (`run_until`) — the reference. Its opcode cases for globals, equality,
+   unary ops, arrays, indexing, fields, and method dispatch *are* calls to the `jit_h_*`
+   helpers, so the tiers cannot drift.
+2. **JIT** (v0.5) — hot functions compile to machine code: int arithmetic/branches inlined
+   with tag-guard deopts, everything else a call into the same helpers.
+3. **AOT** (v0.12) — `brokm build` emits one C function per chunk (`bool bk_f<i>(Value *slots)`,
+   the `JitFn` signature): the interpreter specialized to that chunk, labels at jump targets,
+   guarded int fast paths for the typed opcodes, helpers for the rest. The bootstrap rebuilds
+   the constant graph inside shim `ObjFunction`s (pools populated, `chunk.code` empty — no
+   bytecode ships) and sets `fn->nativeCode` to the emitted function, so the existing
+   `call_function` dispatch routes `OP_CALL`, first-class function values, and `OP_INVOKE` to
+   compiled code, and the GC roots everything through the script function as usual. The
+   generated `.c` is architecture-independent and compiles with the runtime sources under
+   `-DBK_NO_JIT`; the interpreter stays in the binary so dynamically assembled functions
+   (`Assemble`) still run.
 
 ## Embedding model
 

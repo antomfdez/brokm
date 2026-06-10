@@ -115,13 +115,16 @@ static bool call_function(ObjFunction *fn, int argCount) {
     return false;
   }
 #ifndef BK_NO_JIT
-  /* Profile-gated JIT: compile once hot, then run the native code directly.
-   * Native functions do not use vm->frames — their generated epilogue leaves the
-   * result on the value stack just as OP_RETURN would. */
+  /* Profile-gated JIT: compile once hot. */
   if (fn->nativeCode == NULL && !fn->jitDisabled &&
       ++fn->callCount >= jit_threshold()) {
     jit_try_compile(fn);
   }
+#endif
+  /* Native code (JIT-compiled or AOT-emitted) runs directly: it does not use
+   * vm->frames — its epilogue leaves the result on the value stack just as
+   * OP_RETURN would. AOT binaries build with -DBK_NO_JIT but set nativeCode in
+   * their bootstrap, so this dispatch stays unconditional. */
   if (fn->nativeCode != NULL) {
     if (vm->stackTop - vm->stack > BK_STACK_MAX - BK_SLOT_COUNT) {
       runtime_error("Stack overflow.");
@@ -129,7 +132,6 @@ static bool call_function(ObjFunction *fn, int argCount) {
     }
     return ((JitFn)fn->nativeCode)(vm->stackTop - argCount - 1);
   }
-#endif
   if (vm->frameCount == BK_FRAMES_MAX) {
     runtime_error("Stack overflow.");
     return false;
@@ -176,6 +178,33 @@ static bool call_value(Value callee, int argCount) {
   }
   runtime_error("Can only call functions.");
   return false;
+}
+
+/* obj.name(args): the dispatch half of OP_INVOKE, shared by the interpreter
+ * case and jit_h_invoke. May push a bytecode frame (the caller decides how to
+ * run it); returns false after reporting a runtime error. */
+static bool invoke_dispatch(ObjString *name, int argCount) {
+  Value recv = peek(argCount);
+  if (!IS_INSTANCE(recv)) {
+    runtime_error("Only instances have methods.");
+    return false;
+  }
+  ObjInstance *inst = AS_INSTANCE(recv);
+  Value field;
+  if (table_get(&inst->fields, name, &field)) {
+    /* A field holding a callable shadows methods: call it as an ordinary
+     * value (receiver slot becomes the callable, no `this` binding). */
+    vm->stackTop[-argCount - 1] = field;
+    return call_value(field, argCount);
+  }
+  Value method;
+  if (!table_get(&inst->klass->methods, name, &method)) {
+    runtime_error("%s has no method '%s'.", inst->klass->name->chars,
+                  name->chars);
+    return false;
+  }
+  /* The receiver stays in slot 0, so the method sees it as `this`. */
+  return call_function(AS_FUNCTION(method), argCount);
 }
 
 typedef enum { AR_OK, AR_NOT_NUM, AR_NOT_INT, AR_DIV0 } ArStatus;
@@ -320,31 +349,15 @@ static InterpretResult run_until(int baseFrameCount) {
       case OP_FALSE: vm_push(BOOL_VAL(false)); break;
       case OP_POP: vm_pop(); break;
 
-      case OP_DEFINE_GLOBAL: {
-        ObjString *name = READ_STRING();
-        table_set(&vm->globals, name, peek(0));
-        vm_pop();
+      case OP_DEFINE_GLOBAL:
+        jit_h_define_global(READ_STRING());
         break;
-      }
-      case OP_GET_GLOBAL: {
-        ObjString *name = READ_STRING();
-        Value value;
-        if (!table_get(&vm->globals, name, &value)) {
-          runtime_error("Undefined variable '%s'.", name->chars);
-          return BK_RUNTIME_ERROR;
-        }
-        vm_push(value);
+      case OP_GET_GLOBAL:
+        if (!jit_h_get_global(READ_STRING())) return BK_RUNTIME_ERROR;
         break;
-      }
-      case OP_SET_GLOBAL: {
-        ObjString *name = READ_STRING();
-        if (table_set(&vm->globals, name, peek(0))) {
-          table_delete(&vm->globals, name);
-          runtime_error("Undefined variable '%s'.", name->chars);
-          return BK_RUNTIME_ERROR;
-        }
+      case OP_SET_GLOBAL:
+        if (!jit_h_set_global(READ_STRING())) return BK_RUNTIME_ERROR;
         break;
-      }
       case OP_GET_LOCAL: {
         U8 slot = READ_BYTE();
         vm_push(frame->slots[slot]);
@@ -356,16 +369,8 @@ static InterpretResult run_until(int baseFrameCount) {
         break;
       }
 
-      case OP_EQUAL: {
-        Value b = vm_pop(), a = vm_pop();
-        vm_push(BOOL_VAL(value_equal(a, b)));
-        break;
-      }
-      case OP_NOT_EQUAL: {
-        Value b = vm_pop(), a = vm_pop();
-        vm_push(BOOL_VAL(!value_equal(a, b)));
-        break;
-      }
+      case OP_EQUAL: jit_h_equal(0); break;
+      case OP_NOT_EQUAL: jit_h_equal(1); break;
       case OP_GREATER: op_greater: BINARY(OP_GREATER); break;
       case OP_GREATER_EQUAL: op_greater_equal: BINARY(OP_GREATER_EQUAL); break;
       case OP_LESS: op_less: BINARY(OP_LESS); break;
@@ -454,30 +459,15 @@ static InterpretResult run_until(int baseFrameCount) {
       case OP_SHL: BINARY(OP_SHL); break;
       case OP_SHR: BINARY(OP_SHR); break;
 
-      case OP_NEGATE: {
-        Value v = vm_pop();
-        if (IS_INT(v)) {
-          vm_push(INT_VAL(-AS_INT(v)));
-        } else if (IS_FLOAT(v)) {
-          vm_push(FLOAT_VAL(-AS_FLOAT(v)));
-        } else {
-          runtime_error("Operand must be a number.");
-          return BK_RUNTIME_ERROR;
-        }
+      case OP_NEGATE:
+        if (!jit_h_negate()) return BK_RUNTIME_ERROR;
         break;
-      }
       case OP_NOT:
         vm_push(BOOL_VAL(!value_truthy(vm_pop())));
         break;
-      case OP_BIT_NOT: {
-        Value v = vm_pop();
-        if (!IS_INT(v)) {
-          runtime_error("Operand must be an integer.");
-          return BK_RUNTIME_ERROR;
-        }
-        vm_push(INT_VAL(~AS_INT(v)));
+      case OP_BIT_NOT:
+        if (!jit_h_bit_not()) return BK_RUNTIME_ERROR;
         break;
-      }
 
       case OP_JUMP: {
         U16 offset = READ_SHORT();
@@ -509,134 +499,28 @@ static InterpretResult run_until(int baseFrameCount) {
       case OP_INVOKE: {
         ObjString *name = READ_STRING();
         int argCount = READ_BYTE();
-        Value recv = peek(argCount);
-        if (!IS_INSTANCE(recv)) {
-          runtime_error("Only instances have methods.");
-          return BK_RUNTIME_ERROR;
-        }
-        ObjInstance *inst = AS_INSTANCE(recv);
-        Value field;
-        if (table_get(&inst->fields, name, &field)) {
-          /* A field holding a callable shadows methods: call it as an ordinary
-           * value (receiver slot becomes the callable, no `this` binding). */
-          vm->stackTop[-argCount - 1] = field;
-          if (!call_value(field, argCount)) return BK_RUNTIME_ERROR;
-        } else {
-          Value method;
-          if (!table_get(&inst->klass->methods, name, &method)) {
-            runtime_error("%s has no method '%s'.", inst->klass->name->chars,
-                          name->chars);
-            return BK_RUNTIME_ERROR;
-          }
-          /* The receiver stays in slot 0, so the method sees it as `this`. */
-          if (!call_function(AS_FUNCTION(method), argCount)) {
-            return BK_RUNTIME_ERROR;
-          }
-        }
+        if (!invoke_dispatch(name, argCount)) return BK_RUNTIME_ERROR;
         frame = &vm->frames[vm->frameCount - 1];
         break;
       }
-      case OP_PRINT: {
-        int argCount = READ_BYTE();
-        bk_format(argCount, vm->stackTop - argCount);
-        vm->stackTop -= argCount;
+      case OP_PRINT:
+        jit_h_print(READ_BYTE());
         break;
-      }
-      case OP_ARRAY: {
-        int n = READ_BYTE();
-        ObjArray *array = array_new();
-        vm_push(OBJ_VAL(array)); /* keep reachable while appending */
-        Value *base = vm->stackTop - n - 1;
-        for (int i = 0; i < n; i++) array_append(array, base[i]);
-        vm->stackTop = base; /* drop the n elements and the temp array slot */
-        vm_push(OBJ_VAL(array));
+      case OP_ARRAY:
+        jit_h_array(READ_BYTE());
         break;
-      }
-      case OP_INDEX_GET: {
-        Value indexVal = vm_pop();
-        Value arrayVal = vm_pop();
-        if (!IS_ARRAY(arrayVal)) {
-          runtime_error("Can only index arrays.");
-          return BK_RUNTIME_ERROR;
-        }
-        if (!IS_INT(indexVal)) {
-          runtime_error("Array index must be an integer.");
-          return BK_RUNTIME_ERROR;
-        }
-        ObjArray *array = AS_ARRAY(arrayVal);
-        I64 i = AS_INT(indexVal);
-        if (i < 0 || i >= array->elements.count) {
-          runtime_error("Array index %lld out of bounds (length %d).",
-                        (long long)i, array->elements.count);
-          return BK_RUNTIME_ERROR;
-        }
-        vm_push(array->elements.values[i]);
+      case OP_INDEX_GET:
+        if (!jit_h_index_get()) return BK_RUNTIME_ERROR;
         break;
-      }
-      case OP_INDEX_SET: {
-        Value value = vm_pop();
-        Value indexVal = vm_pop();
-        Value arrayVal = vm_pop();
-        if (!IS_ARRAY(arrayVal)) {
-          runtime_error("Can only index arrays.");
-          return BK_RUNTIME_ERROR;
-        }
-        if (!IS_INT(indexVal)) {
-          runtime_error("Array index must be an integer.");
-          return BK_RUNTIME_ERROR;
-        }
-        ObjArray *array = AS_ARRAY(arrayVal);
-        I64 i = AS_INT(indexVal);
-        if (i < 0 || i >= array->elements.count) {
-          runtime_error("Array index %lld out of bounds (length %d).",
-                        (long long)i, array->elements.count);
-          return BK_RUNTIME_ERROR;
-        }
-        array->elements.values[i] = value;
-        gc_write_barrier((Obj *)array, value); /* may be old->young */
-        vm_push(value);
+      case OP_INDEX_SET:
+        if (!jit_h_index_set()) return BK_RUNTIME_ERROR;
         break;
-      }
-      case OP_GET_FIELD: {
-        ObjString *name = READ_STRING();
-        Value objVal = vm_pop();
-        if (!IS_INSTANCE(objVal)) {
-          runtime_error("Only instances have fields.");
-          return BK_RUNTIME_ERROR;
-        }
-        ObjInstance *inst = AS_INSTANCE(objVal);
-        Value value;
-        if (!table_get(&inst->fields, name, &value)) {
-          runtime_error("%s has no field '%s'.", inst->klass->name->chars,
-                        name->chars);
-          return BK_RUNTIME_ERROR;
-        }
-        vm_push(value);
+      case OP_GET_FIELD:
+        if (!jit_h_get_field(READ_STRING())) return BK_RUNTIME_ERROR;
         break;
-      }
-      case OP_SET_FIELD: {
-        ObjString *name = READ_STRING();
-        Value value = peek(0);
-        Value objVal = peek(1);
-        if (!IS_INSTANCE(objVal)) {
-          runtime_error("Only instances have fields.");
-          return BK_RUNTIME_ERROR;
-        }
-        ObjInstance *inst = AS_INSTANCE(objVal);
-        Value existing;
-        if (!table_get(&inst->fields, name, &existing)) {
-          runtime_error("%s has no field '%s'.", inst->klass->name->chars,
-                        name->chars);
-          return BK_RUNTIME_ERROR;
-        }
-        /* both operands stay on the stack across the (possibly collecting) set */
-        table_set(&inst->fields, name, value);
-        gc_write_barrier((Obj *)inst, value);
-        vm_pop(); /* value */
-        vm_pop(); /* instance */
-        vm_push(value);
+      case OP_SET_FIELD:
+        if (!jit_h_set_field(READ_STRING())) return BK_RUNTIME_ERROR;
         break;
-      }
       case OP_RETURN: {
         Value result = vm_pop();
         vm->frameCount--;
@@ -665,13 +549,14 @@ static InterpretResult run_until(int baseFrameCount) {
 #undef BINARY
 }
 
-#ifndef BK_NO_JIT
-/* ---- JIT call-backs ----------------------------------------------------
- * Operations the JIT does not inline call these, which run the interpreter's
- * own logic on the same VM value stack as the matching opcodes. The generated
- * code flushes its cached stack-top to vm->stackTop before calling and reloads
- * it after. Each returns false (after reporting) on a runtime error. Declared
- * in jit.h; the generated code bakes their addresses. */
+/* ---- runtime helpers (JIT + AOT call-backs) ----------------------------
+ * Operations that generated code does not inline call these, which run the
+ * interpreter's own logic on the same VM value stack as the matching opcodes
+ * (the interpreter cases above delegate to the same functions, so the two
+ * paths cannot drift). JIT'd code flushes its cached stack-top to vm->stackTop
+ * before calling and reloads it after; AOT-emitted C uses vm->stackTop
+ * directly. Each returns false (after reporting) on a runtime error. Declared
+ * in jit.h. */
 
 bool jit_h_binary(U8 op) {
   if (op == OP_ADD && IS_STRING(peek(0)) && IS_STRING(peek(1))) {
@@ -722,7 +607,142 @@ bool jit_h_print(int argCount) {
   vm->stackTop -= argCount;
   return true;
 }
-#endif /* BK_NO_JIT */
+
+bool jit_h_define_global(ObjString *name) {
+  table_set(&vm->globals, name, peek(0));
+  vm_pop();
+  return true;
+}
+
+bool jit_h_negate(void) {
+  Value v = vm_pop();
+  if (IS_INT(v)) {
+    vm_push(INT_VAL(-AS_INT(v)));
+  } else if (IS_FLOAT(v)) {
+    vm_push(FLOAT_VAL(-AS_FLOAT(v)));
+  } else {
+    runtime_error("Operand must be a number.");
+    return false;
+  }
+  return true;
+}
+
+bool jit_h_bit_not(void) {
+  Value v = vm_pop();
+  if (!IS_INT(v)) {
+    runtime_error("Operand must be an integer.");
+    return false;
+  }
+  vm_push(INT_VAL(~AS_INT(v)));
+  return true;
+}
+
+bool jit_h_array(int n) {
+  ObjArray *array = array_new();
+  vm_push(OBJ_VAL(array)); /* keep reachable while appending */
+  Value *base = vm->stackTop - n - 1;
+  for (int i = 0; i < n; i++) array_append(array, base[i]);
+  vm->stackTop = base; /* drop the n elements and the temp array slot */
+  vm_push(OBJ_VAL(array));
+  return true;
+}
+
+bool jit_h_index_get(void) {
+  Value indexVal = vm_pop();
+  Value arrayVal = vm_pop();
+  if (!IS_ARRAY(arrayVal)) {
+    runtime_error("Can only index arrays.");
+    return false;
+  }
+  if (!IS_INT(indexVal)) {
+    runtime_error("Array index must be an integer.");
+    return false;
+  }
+  ObjArray *array = AS_ARRAY(arrayVal);
+  I64 i = AS_INT(indexVal);
+  if (i < 0 || i >= array->elements.count) {
+    runtime_error("Array index %lld out of bounds (length %d).", (long long)i,
+                  array->elements.count);
+    return false;
+  }
+  vm_push(array->elements.values[i]);
+  return true;
+}
+
+bool jit_h_index_set(void) {
+  Value value = vm_pop();
+  Value indexVal = vm_pop();
+  Value arrayVal = vm_pop();
+  if (!IS_ARRAY(arrayVal)) {
+    runtime_error("Can only index arrays.");
+    return false;
+  }
+  if (!IS_INT(indexVal)) {
+    runtime_error("Array index must be an integer.");
+    return false;
+  }
+  ObjArray *array = AS_ARRAY(arrayVal);
+  I64 i = AS_INT(indexVal);
+  if (i < 0 || i >= array->elements.count) {
+    runtime_error("Array index %lld out of bounds (length %d).", (long long)i,
+                  array->elements.count);
+    return false;
+  }
+  array->elements.values[i] = value;
+  gc_write_barrier((Obj *)array, value); /* may be old->young */
+  vm_push(value);
+  return true;
+}
+
+bool jit_h_get_field(ObjString *name) {
+  Value objVal = vm_pop();
+  if (!IS_INSTANCE(objVal)) {
+    runtime_error("Only instances have fields.");
+    return false;
+  }
+  ObjInstance *inst = AS_INSTANCE(objVal);
+  Value value;
+  if (!table_get(&inst->fields, name, &value)) {
+    runtime_error("%s has no field '%s'.", inst->klass->name->chars,
+                  name->chars);
+    return false;
+  }
+  vm_push(value);
+  return true;
+}
+
+bool jit_h_set_field(ObjString *name) {
+  Value value = peek(0);
+  Value objVal = peek(1);
+  if (!IS_INSTANCE(objVal)) {
+    runtime_error("Only instances have fields.");
+    return false;
+  }
+  ObjInstance *inst = AS_INSTANCE(objVal);
+  Value existing;
+  if (!table_get(&inst->fields, name, &existing)) {
+    runtime_error("%s has no field '%s'.", inst->klass->name->chars,
+                  name->chars);
+    return false;
+  }
+  /* both operands stay on the stack across the (possibly collecting) set */
+  table_set(&inst->fields, name, value);
+  gc_write_barrier((Obj *)inst, value);
+  vm_pop(); /* value */
+  vm_pop(); /* instance */
+  vm_push(value);
+  return true;
+}
+
+bool jit_h_invoke(ObjString *name, int argCount) {
+  int saved = vm->frameCount;
+  if (!invoke_dispatch(name, argCount)) return false;
+  if (vm->frameCount > saved) {
+    /* a bytecode method frame was pushed: run exactly that nested call */
+    return run_until(saved) == BK_OK;
+  }
+  return true; /* native-code method / shadowing field already produced it */
+}
 
 static InterpretResult interpret(const char *source, const char *baseDir) {
   /* Parsing and compilation allocate objects (interned names, functions,

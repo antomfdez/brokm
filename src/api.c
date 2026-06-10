@@ -14,7 +14,7 @@
 #include "typecheck.h"
 #include "vm.h"
 
-#define BROKM_VERSION "0.11.2"
+#define BROKM_VERSION "0.12.0"
 
 /* BrokmValue and the internal Value are layout-identical 16-byte structs; this
  * union reinterprets between them (the host only ever builds a BrokmValue via

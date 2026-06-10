@@ -9,8 +9,8 @@ SRC := $(wildcard src/*.c)
 OBJ := $(SRC:.c=.o)
 BIN := brokm
 
-.PHONY: all debug test bench embed test-embed test-selfcompile test-bootstrap \
-	test-fixpoint clean
+.PHONY: all debug test test-aot bench embed test-embed test-selfcompile \
+	test-bootstrap test-fixpoint clean
 
 # Embedding demo: the library sources (minus the CLI main) + the host program.
 EMBED_SRC := $(filter-out src/main.c,$(SRC))
@@ -30,6 +30,12 @@ debug: clean $(BIN)
 
 test: $(BIN)
 	@bash tests/run_tests.sh
+
+# AOT golden tests: `brokm build` compiles every case to a native executable
+# (emitted C + runtime sources, -DBK_NO_JIT) and the output must match the same
+# goldens the interpreter suite uses.
+test-aot: $(BIN)
+	@bash tests/run_tests_aot.sh
 
 # Run the whole suite with the collector firing on every allocation. If marking
 # is wrong, a live object gets swept and a test crashes or misbehaves.

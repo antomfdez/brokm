@@ -41,3 +41,6 @@ jobs:
           make clean
           make
           make test-embed test-selfcompile test-bootstrap test-fixpoint
+
+      - name: Test (AOT compile-to-C)
+        run: make test-aot

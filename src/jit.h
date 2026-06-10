@@ -46,14 +46,25 @@ void jit_try_compile(ObjFunction *fn);
  * default 50). Returns INT_MAX when the JIT is unavailable. */
 int jit_threshold(void);
 
-/* C call-backs the generated code branches into for non-inlined operations
- * (defined in vm.c). Each operates on the VM value stack and returns false on a
- * runtime error. */
+/* Runtime helpers generated code branches into for non-inlined operations
+ * (defined in vm.c; the interpreter's own opcode cases delegate to the same
+ * functions). This is the shared helper ABI for JIT-compiled machine code and
+ * AOT-emitted C alike. Each operates on the VM value stack and returns false
+ * on a runtime error. */
 bool jit_h_binary(U8 op);
 bool jit_h_equal(int negate);
 bool jit_h_get_global(ObjString *name);
 bool jit_h_set_global(ObjString *name);
+bool jit_h_define_global(ObjString *name);
 bool jit_h_call(int argCount);
+bool jit_h_invoke(ObjString *name, int argCount);
 bool jit_h_print(int argCount);
+bool jit_h_negate(void);
+bool jit_h_bit_not(void);
+bool jit_h_array(int n);
+bool jit_h_index_get(void);
+bool jit_h_index_set(void);
+bool jit_h_get_field(ObjString *name);
+bool jit_h_set_field(ObjString *name);
 
 #endif /* BROKM_JIT_H */

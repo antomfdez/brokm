@@ -381,6 +381,54 @@ check, and the one known silent-corruption path in the self-hosting bridge now f
   red/green-checked (it flags differing top-level constants and differing nested-function
   bodies). CI now runs `test-fixpoint` too.
 
+## v0.12 — AOT compile-to-C + CLI subcommands ✅ (done)
+
+The first cut of the path to the long-term vision: **programs that run without the VM toolchain
+at the door** — and, much later, a kernel written in brokm (which can never carry a JIT, a
+mandatory GC, or libc). `brokm build` translates a program to C and drives the system C compiler
+to a standalone native executable.
+
+- **CLI subcommands.** `brokm run file.bk`, `brokm build file.bk [-o out] [--emit=c] [--keep-c]
+  [--cc <compiler>] [-O0..-O3] [--verbose] [--quiet]`, `brokm --help`. The legacy spellings
+  (`brokm file.bk`, bare `brokm` for the REPL, `--version`) still work, so every existing test,
+  script, and finger habit is untouched.
+- **Bytecode → C, correct by construction.** The back-end (`src/cemit.c`) does for C source what
+  the JIT does for machine code: each `ObjFunction` chunk becomes a C function with the `JitFn`
+  signature (`bool bk_f<i>(Value *slots)`) whose body is the interpreter specialized for that
+  chunk — straight-line statements on the VM value stack, `goto` labels at jump targets, guarded
+  int fast paths for the typed opcodes, and the shared `jit_h_*` runtime helpers for everything
+  else. The interpreter's own opcode cases now *delegate to those same helpers* (extracted in
+  this milestone: define-global, negate, bit-not, array, index get/set, field get/set, invoke),
+  so the three execution tiers — interpreter, JIT, AOT — literally share one semantics.
+- **No bytecode in the binary.** The bootstrap rebuilds each function's constant pool inside its
+  shim `ObjFunction` (strings re-interned, classes rebuilt with their method tables, nested
+  functions wired by pointer) and sets `fn->nativeCode` to the emitted C function — so
+  `OP_CALL`, first-class function values, and method dispatch all reach compiled code through
+  the *existing* `call_function` dispatch, and the GC traces the whole constant graph through
+  the script function exactly as the interpreter does. The `chunk.code` arrays stay empty.
+- **The interpreter stays in the runtime** (it is small): dynamically assembled functions — the
+  `Assemble` native the self-hosting track is built on — still execute on it, *inside an AOT
+  binary*. `tests/cases/selfhost*.bk` compile and pass as native executables.
+- **Runtime packaging.** The emitted `.c` compiles together with the runtime sources
+  (`-DBK_NO_JIT`; the `fn->nativeCode` dispatch is now unconditional while only the JIT's
+  profile gating sits behind the flag). The build finds them next to the `brokm` binary or via
+  `$BROKM_HOME`. Errors before codegen (parse/typecheck) report exactly as `brokm run` does,
+  at build time.
+- **Verified.** `make test-aot`: all 52 goldens compiled to native executables and diffed
+  against the same expected outputs (including the static-type-error cases via build stderr and
+  the GC write-barrier cases); plus the standard four-way matrix, embed, selfcompile, bootstrap,
+  and fixpoint — 0 warnings. CI runs `test-aot` on macOS arm64 and Linux x86-64 (the emitted C
+  is architecture-independent).
+- **Speed today:** Fib(34) ~1.6× faster than the interpreter, slower than the JIT — the
+  generated C re-reads `vm->stackTop` through the global on every push/pop where the JIT keeps
+  it in a register. Closing that gap is the v0.13 work below.
+- **Deferred (the kernel path, sketched):** v0.13 optimizes the emitted C (locals as C
+  variables, unboxed `I64` when the typechecker proves it, direct `bk_f<i>` calls for
+  statically-known callees, cached stack-top). v0.14 adds a `--freestanding` runtime profile —
+  no libc natives, GC compiled out (manual `MAlloc`/`Free` + `Peek`/`Poke` already exist), no
+  front-end/interpreter in the link, custom entry point — which is what booting a kernel needs.
+  Cross-compilation is nearly free already (`--cc` passthrough + arch-independent C).
+
 ## Self-hosting (north star)
 
 Can brokm compile itself? Eventually, yes — and brokm now hosts the front-end of a compiler.
@@ -603,10 +651,26 @@ Can brokm compile itself? Eventually, yes — and brokm now hosts the front-end 
 
 ## What's next
 
-With the bootstrap, multi-instance VMs, and portability/CI done, what remains is hardening and
-the long-tail features. In order:
+With the bootstrap, multi-instance VMs, portability/CI, and the AOT compile-to-C backend done,
+the road points toward the long-term vision: a `--freestanding` profile good enough to boot a
+kernel written in brokm. In order:
 
-### Hardening + deferred fixes (next up)
+### v0.13 — Optimize the emitted C (next up)
+
+- **Locals as C variables** (no closures in the language, so escape analysis is trivial),
+  **unboxed `I64`** paths where the typechecker proves both operands int, **direct `bk_f<i>`
+  calls** for statically-known callees, and a **cached stack-top** flushed around helper calls
+  (what the JIT already does in a register). Goal: meet or beat the JIT on `make bench`.
+
+### v0.14 — `--freestanding` runtime profile (the kernel path)
+
+- A `BK_FREESTANDING` build of the runtime for `brokm build`: no libc natives (subset table),
+  GC compiled out (manual `MAlloc`/`Free` + `Peek`/`Poke` already exist), no
+  parser/typecheck/compiler/interpreter in the link, custom entry point, `--target`/linker
+  passthrough. The v0.12 architecture was shaped so generated code depends only on the helper
+  ABI + object constructors — both separable from the front end.
+
+### Hardening + deferred fixes
 
 - **Postfix `++`/`--` value semantics** and the **switch-scope** simplification, deferred since
   v0.4. (The three-stage fixpoint and the `Assemble` constant guard landed in v0.11.2.)

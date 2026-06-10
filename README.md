@@ -38,13 +38,23 @@ Requires a C99 compiler and `make` (no external dependencies).
 
 ```sh
 make              # builds ./brokm  (-std=c99 -Wall -Wextra, 0 warnings)
-./brokm file.bk   # run a program
+./brokm file.bk   # run a program (JIT-compiled when hot)
+./brokm run file.bk            # same, explicit subcommand
+./brokm build file.bk -o app   # AOT-compile to a standalone native executable
+./brokm build file.bk --emit=c # emit the generated C instead of an executable
 ./brokm           # start the REPL
 make test         # run the golden test suite
+make test-aot     # run the suite AOT-compiled to native executables
 make test-gc      # run the suite with the GC firing on every allocation
 make bench        # benchmark the JIT against the interpreter (Fib)
 make debug        # ASan/UBSan + bytecode/exec tracing build
 ```
+
+`brokm build` translates the compiled bytecode to C and drives the system C
+compiler (options: `-o <out>`, `--emit=c`, `--keep-c`, `--cc <compiler>`,
+`-O0`..`-O3`, `--verbose`, `--quiet`). The build needs the brokm source tree to
+link the runtime: it looks next to the `brokm` executable, or wherever
+`BROKM_HOME` points.
 
 ## Language at a glance
 
