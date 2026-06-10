@@ -1,9 +1,16 @@
 /* natives.c - the Print formatter, the standard library, and native
  * registration. */
+#ifdef __linux__
+#define _DEFAULT_SOURCE /* popen, getline, gettimeofday, nanosleep under -std=c99 */
+#endif
+
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/time.h>
+#include <sys/wait.h>
+#include <time.h>
 
 #include "gc.h"
 #include "natives.h"
@@ -677,6 +684,159 @@ static Value native_value_desc(int argc, Value *args) {
   return OBJ_VAL(string_copy(desc, (int)strlen(desc)));
 }
 
+/* ---- standard library: scripting / OS -------------------------------------
+ * The primitives that make brokm usable as a shell-script replacement: program
+ * arguments, environment, processes, stdin, time. Everything here is a thin,
+ * NULL-on-failure wrapper over POSIX (macOS + Linux, the two CI targets). */
+
+/* Script arguments, stashed by the driver before the VM runs (see
+ * natives_set_args). Process-wide on purpose: argv outlives every VM. */
+static int g_argCount = 0;
+static char **g_argValues = NULL;
+
+void natives_set_args(int argc, char **argv) {
+  g_argCount = argc;
+  g_argValues = argv;
+}
+
+/* Args() - a new array of the script's command-line arguments (the ones after
+ * the script path; for an AOT-compiled program, the ones after the program). */
+static Value native_args(int argc, Value *args) {
+  (void)argc;
+  (void)args;
+  ObjArray *out = array_new();
+  vm_push(OBJ_VAL(out)); /* root: each append may allocate and collect */
+  for (int i = 0; i < g_argCount; i++) {
+    ObjString *s = string_copy(g_argValues[i], (int)strlen(g_argValues[i]));
+    vm_push(OBJ_VAL(s)); /* root the fresh string across the append's growth */
+    array_append(out, OBJ_VAL(s));
+    vm_pop();
+  }
+  vm_pop();
+  return OBJ_VAL(out);
+}
+
+/* Env(name) - the environment variable's value, or nil if unset. */
+static Value native_env(int argc, Value *args) {
+  if (argc < 1 || !IS_STRING(args[0])) return NIL_VAL;
+  const char *v = getenv(AS_CSTRING(args[0]));
+  if (v == NULL) return NIL_VAL;
+  return OBJ_VAL(string_copy(v, (int)strlen(v)));
+}
+
+/* Exit(code) - terminate the process immediately with the given status. */
+static Value native_exit(int argc, Value *args) {
+  fflush(stdout);
+  fflush(stderr);
+  exit(argc >= 1 ? (int)to_i64(args[0]) : 0);
+}
+
+/* Shell(cmd) - run a shell command; returns its exit status (-1 on failure). */
+static Value native_shell(int argc, Value *args) {
+  if (argc < 1 || !IS_STRING(args[0])) return INT_VAL(-1);
+  fflush(stdout); /* keep brokm output ordered against the child's */
+  int rc = system(AS_CSTRING(args[0]));
+  if (rc == -1) return INT_VAL(-1);
+  return INT_VAL(WIFEXITED(rc) ? WEXITSTATUS(rc) : -1);
+}
+
+/* ShellStr(cmd) - run a shell command and return its stdout as a string
+ * (including any trailing newline), or nil if the command could not start. */
+static Value native_shell_str(int argc, Value *args) {
+  if (argc < 1 || !IS_STRING(args[0])) return NIL_VAL;
+  fflush(stdout);
+  FILE *p = popen(AS_CSTRING(args[0]), "r");
+  if (p == NULL) return NIL_VAL;
+  size_t cap = 1024, len = 0;
+  char *buf = (char *)malloc(cap);
+  if (buf == NULL) {
+    pclose(p);
+    return NIL_VAL;
+  }
+  size_t rd;
+  while ((rd = fread(buf + len, 1, cap - len, p)) > 0) {
+    len += rd;
+    if (len == cap) {
+      cap *= 2;
+      char *grown = (char *)realloc(buf, cap);
+      if (grown == NULL) {
+        free(buf);
+        pclose(p);
+        return NIL_VAL;
+      }
+      buf = grown;
+    }
+  }
+  pclose(p);
+  Value s = OBJ_VAL(string_copy(buf, (int)len));
+  free(buf);
+  return s;
+}
+
+/* Input() - one line from stdin without the trailing newline, or nil on EOF. */
+static Value native_input(int argc, Value *args) {
+  (void)argc;
+  (void)args;
+  char *line = NULL;
+  size_t cap = 0;
+  ssize_t n = getline(&line, &cap, stdin);
+  if (n < 0) {
+    free(line);
+    return NIL_VAL;
+  }
+  if (n > 0 && line[n - 1] == '\n') n--;
+  Value s = OBJ_VAL(string_copy(line, (int)n));
+  free(line);
+  return s;
+}
+
+/* Time() - seconds since the Unix epoch. */
+static Value native_time(int argc, Value *args) {
+  (void)argc;
+  (void)args;
+  return INT_VAL((I64)time(NULL));
+}
+
+/* TimeMs() - milliseconds since the Unix epoch (wall clock, for timing). */
+static Value native_time_ms(int argc, Value *args) {
+  (void)argc;
+  (void)args;
+  struct timeval tv;
+  gettimeofday(&tv, NULL);
+  return INT_VAL((I64)tv.tv_sec * 1000 + tv.tv_usec / 1000);
+}
+
+/* Sleep(ms) - pause for the given number of milliseconds. */
+static Value native_sleep(int argc, Value *args) {
+  if (argc < 1 || !IS_INT(args[0]) || AS_INT(args[0]) <= 0) return NIL_VAL;
+  I64 ms = AS_INT(args[0]);
+  struct timespec ts;
+  ts.tv_sec = (time_t)(ms / 1000);
+  ts.tv_nsec = (long)(ms % 1000) * 1000000L;
+  nanosleep(&ts, NULL);
+  return NIL_VAL;
+}
+
+/* AppendFile(path, contents) - append a string to a file; true on success. */
+static Value native_append_file(int argc, Value *args) {
+  if (argc < 2 || !IS_STRING(args[0]) || !IS_STRING(args[1])) return BOOL_VAL(false);
+  FILE *f = fopen(AS_CSTRING(args[0]), "ab");
+  if (f == NULL) return BOOL_VAL(false);
+  ObjString *c = AS_STRING(args[1]);
+  size_t w = fwrite(c->chars, 1, (size_t)c->length, f);
+  fclose(f);
+  return BOOL_VAL(w == (size_t)c->length);
+}
+
+/* FileExists(path) - true if the path can be opened for reading. */
+static Value native_file_exists(int argc, Value *args) {
+  if (argc < 1 || !IS_STRING(args[0])) return BOOL_VAL(false);
+  FILE *f = fopen(AS_CSTRING(args[0]), "rb");
+  if (f == NULL) return BOOL_VAL(false);
+  fclose(f);
+  return BOOL_VAL(true);
+}
+
 void natives_register(void) {
   vm_define_native("Print", native_print);
   vm_define_native("PrintErr", native_print_err);
@@ -719,6 +879,18 @@ void natives_register(void) {
   vm_define_native("Pow", native_pow);
   vm_define_native("Floor", native_floor);
   vm_define_native("Ceil", native_ceil);
+  /* v0.13 scripting / OS */
+  vm_define_native("Args", native_args);
+  vm_define_native("Env", native_env);
+  vm_define_native("Exit", native_exit);
+  vm_define_native("Shell", native_shell);
+  vm_define_native("ShellStr", native_shell_str);
+  vm_define_native("Input", native_input);
+  vm_define_native("Time", native_time);
+  vm_define_native("TimeMs", native_time_ms);
+  vm_define_native("Sleep", native_sleep);
+  vm_define_native("AppendFile", native_append_file);
+  vm_define_native("FileExists", native_file_exists);
   vm_define_native("Opcode", native_opcode);
   vm_define_native("Assemble", native_assemble);
   vm_define_native("MakeClass", native_make_class);

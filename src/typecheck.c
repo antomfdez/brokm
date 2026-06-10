@@ -216,6 +216,9 @@ static void register_natives(void) {
       "Opcode", "Assemble", "MakeClass", "AddMethod",
       /* bytecode introspection (bootstrap fixpoint check) */
       "ChunkCode", "ChunkConsts", "ValueDesc",
+      /* v0.13 scripting / OS */
+      "Args",   "Env",       "Exit",      "Shell",   "ShellStr",
+      "Input",  "Time",      "TimeMs",    "Sleep",   "AppendFile", "FileExists",
   };
   size_t n = sizeof(NAMES) / sizeof(NAMES[0]);
   for (size_t i = 0; i < n; i++) {

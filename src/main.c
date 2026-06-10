@@ -12,13 +12,14 @@
 
 #include "aot.h"
 #include "brokm.h"
+#include "natives.h"
 
 static void usage(FILE *out) {
   fputs(
       "Usage: brokm [command] ...\n"
       "  brokm                      start a REPL\n"
-      "  brokm <path.bk>            run a file\n"
-      "  brokm run <path.bk>        run a file\n"
+      "  brokm <path.bk> [args...]  run a file (args readable via Args())\n"
+      "  brokm run <path.bk> [args...]  run a file\n"
       "  brokm build <path.bk> [-o <out>] [--emit=c] [--keep-c]\n"
       "                        [--cc <compiler>] [-O0|-O1|-O2|-O3]\n"
       "                        [--verbose] [--quiet]\n"
@@ -104,10 +105,11 @@ int main(int argc, char **argv) {
   if (argc >= 2 && strcmp(argv[1], "build") == 0) return cmd_build(argc, argv);
 
   if (argc >= 2 && strcmp(argv[1], "run") == 0) {
-    if (argc != 3) {
-      fprintf(stderr, "Usage: brokm run <path.bk>\n");
+    if (argc < 3) {
+      fprintf(stderr, "Usage: brokm run <path.bk> [args...]\n");
       return 64;
     }
+    natives_set_args(argc - 3, argv + 3);
     return run_file(argv[2]);
   }
 
@@ -131,7 +133,12 @@ int main(int argc, char **argv) {
       usage(stdout);
       return 0;
     }
-    return run_file(argv[1]); /* legacy: brokm file.bk */
+  }
+
+  /* Legacy spelling: brokm file.bk [args...] */
+  if (argc >= 2 && argv[1][0] != '-') {
+    natives_set_args(argc - 2, argv + 2);
+    return run_file(argv[1]);
   }
 
   usage(stderr);
