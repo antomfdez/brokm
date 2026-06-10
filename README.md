@@ -176,6 +176,22 @@ Syntax highlighting for `.bk` files ships under [`editors/`](editors/):
 
 Install instructions for each editor are in [`editors/README.md`](editors/README.md).
 
+## broked — an editor written in brokm
+
+[**broked**](https://github.com/antomfdez/broked) is a vim-style terminal code
+editor written entirely in brokm: modal editing, counts, registers, undo,
+search, an ex command line, line numbers, and syntax highlighting for `.bk`
+files. brokm has no raw-tty natives, so its terminal layer is built from the
+scripting stdlib alone — `Shell`/`ShellStr` driving `stty` and `dd`, with
+`ShellStr`'s stdout flush doubling as the frame flush — and `brokm build`
+turns it into a standalone native executable. It comes with a 100-assertion
+headless test suite that drives the key dispatcher with no terminal attached.
+
+```sh
+brokm broked.bk file.bk            # run from source
+brokm build broked.bk -o broked    # or AOT-compile the editor itself
+```
+
 ## Status
 
 brokm runs real programs (arithmetic, variables, control flow, functions, recursion, strings,
