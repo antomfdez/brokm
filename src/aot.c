@@ -26,15 +26,16 @@
 #define PATH_MAX 4096
 #endif
 
-/* Runtime translation units linked into every AOT binary: all of src/ except
- * main.c (the CLI) and aot.c/cemit.c (the build tool itself). The front end
- * stays in because vm.c's interpret() references it, and the interpreter stays
- * in because dynamically assembled functions (the Assemble native) run on it. */
+/* Runtime translation units linked into every AOT binary (v0.15: the runtime
+ * core only — no lexer/parser/typechecker/compiler/embedding API; vm.c's sole
+ * use of them, interpret(), is compiled out with -DBK_NO_FRONTEND). The
+ * interpreter loop stays in because dynamically assembled functions (the
+ * Assemble native) run on it, and jit.c stays for its BK_NO_JIT
+ * jit_init/jit_shutdown stubs. */
 static const char *const RUNTIME_SRCS[] = {
-    "api.c",    "ast.c",   "chunk.c",     "compiler.c", "debug.c",
-    "gc.c",     "jit.c",   "jit_arm64.c", "jit_x64.c",  "lexer.c",
-    "memory.c", "natives.c", "object.c",  "parser.c",   "table.c",
-    "typecheck.c", "types.c", "value.c",  "vm.c",
+    "chunk.c",  "debug.c",   "gc.c",      "jit.c",   "jit_arm64.c",
+    "jit_x64.c", "memory.c", "natives.c", "object.c", "table.c",
+    "value.c",  "vm.c",
 };
 #define RUNTIME_SRC_COUNT (sizeof(RUNTIME_SRCS) / sizeof(RUNTIME_SRCS[0]))
 
@@ -216,8 +217,9 @@ int aot_build(const char *srcPath, const char *argv0, const AotOptions *opt) {
 
   static char cmd[32768];
   size_t len = 0;
-  bool fit = buf_appendf(cmd, sizeof(cmd), &len, "%s -std=c99 %s -DBK_NO_JIT ",
-                         cc, opt->optFlag);
+  bool fit = buf_appendf(cmd, sizeof(cmd), &len,
+                         "%s -std=c99 %s -DBK_NO_JIT -DBK_NO_FRONTEND ", cc,
+                         opt->optFlag);
   fit = fit && buf_appendf(cmd, sizeof(cmd), &len, "-I");
   fit = fit && buf_append_quoted(cmd, sizeof(cmd), &len, home);
   fit = fit && buf_appendf(cmd, sizeof(cmd), &len, "/include -I");

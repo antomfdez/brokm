@@ -4,17 +4,22 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "compiler.h"
 #include "gc.h"
 #include "jit.h"
 #include "memory.h"
 #include "natives.h"
 #include "object.h"
-#include "parser.h"
 #include "table.h"
-#include "typecheck.h"
 #include "value.h"
 #include "vm.h"
+
+/* BK_NO_FRONTEND (v0.15): AOT binaries link the runtime without the
+ * parser/typechecker/compiler — interpret() below is their only user here. */
+#ifndef BK_NO_FRONTEND
+#include "compiler.h"
+#include "parser.h"
+#include "typecheck.h"
+#endif
 
 #ifdef BK_DEBUG_TRACE_EXECUTION
 #include "debug.h"
@@ -744,6 +749,7 @@ bool jit_h_invoke(ObjString *name, int argCount) {
   return true; /* native-code method / shadowing field already produced it */
 }
 
+#ifndef BK_NO_FRONTEND
 static InterpretResult interpret(const char *source, const char *baseDir) {
   /* Parsing and compilation allocate objects (interned names, functions,
    * constants) that are not yet reachable from VM roots, so collection stays
@@ -784,6 +790,7 @@ InterpretResult vm_interpret(const char *source) {
 InterpretResult vm_interpret_file(const char *source, const char *baseDir) {
   return interpret(source, baseDir);
 }
+#endif /* BK_NO_FRONTEND */
 
 /* ---- embedding support (used by api.c) -------------------------------- */
 
