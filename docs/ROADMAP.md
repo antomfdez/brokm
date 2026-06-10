@@ -421,10 +421,8 @@ to a standalone native executable.
   is architecture-independent).
 - **Speed today:** Fib(34) ~1.6× faster than the interpreter, slower than the JIT — the
   generated C re-reads `vm->stackTop` through the global on every push/pop where the JIT keeps
-  it in a register. Closing that gap is the v0.13 work below.
-- **Deferred (the kernel path, sketched):** v0.13 optimizes the emitted C (locals as C
-  variables, unboxed `I64` when the typechecker proves it, direct `bk_f<i>` calls for
-  statically-known callees, cached stack-top). v0.14 adds a `--freestanding` runtime profile —
+  it in a register. Closing that gap became v0.14 (done: cached `sp` + direct AOT→AOT calls).
+- **Deferred (the kernel path, sketched):** v0.15 adds a `--freestanding` runtime profile —
   no libc natives, GC compiled out (manual `MAlloc`/`Free` + `Peek`/`Poke` already exist), no
   front-end/interpreter in the link, custom entry point — which is what booting a kernel needs.
   Cross-compilation is nearly free already (`--cc` passthrough + arch-independent C).
@@ -668,18 +666,35 @@ Also: the Makefile now emits header dependencies (`-MMD -MP`), so editing a `.h`
 exactly its dependents — the historical "stale object after a header edit" hazard is gone —
 and `CLAUDE.md` + `docs/CODEMAP.md` orient both humans and AI tools in the codebase.
 
+## v0.14 — Optimize the emitted C ✅ (done)
+
+Goal was to meet or beat the JIT on `make bench`; achieved with two of the four planned
+optimizations, so the milestone closed there:
+
+- **Cached stack-top**: each `bk_f<i>` keeps `vm->stackTop` in a C local (`sp`), with
+  `FLUSH()`/`RELOAD()` bracketing every `jit_h_*` helper call — the same discipline the
+  arm64 JIT applies with its dedicated register. Pure stack traffic stays in registers.
+- **Direct AOT→AOT calls**: `OP_CALL` checks at runtime that the callee is an AOT-compiled
+  function of matching arity (and that the stack has headroom) and invokes its `bk_f`
+  directly, skipping `jit_h_call` → `call_value` dispatch. The check is dynamic because
+  globals are mutable — there is no statically-known callee in brokm.
+- `make bench` grew an AOT tier. Fib(34) on an M4: interpreter ~1.4s, JIT 0.15s,
+  AOT 0.24s → **0.12s**.
+
+Dropped (recorded so nobody re-attempts them naively):
+
+- **Locals as C variables** — locals *are* VM stack slots, i.e. GC roots. Hoisting them into
+  C locals hides them from the collector unless every safepoint spills them back, which
+  costs what it saves. Would only make sense bundled with unboxing + a side root map.
+- **Unboxed `I64`** — gradual typing means a static `I64` slot can hold a float at runtime;
+  unboxing needs guards + a deopt story per function, a much bigger project than the
+  remaining ~20% win. Revisit if `--freestanding` (v0.15) makes AOT speed critical.
+
 ## What's next
 
-With the bootstrap, multi-instance VMs, portability/CI, the AOT compile-to-C backend, and the
-scripting stdlib done, the road points toward the long-term vision: a `--freestanding` profile
-good enough to boot a kernel written in brokm. In order:
-
-### v0.14 — Optimize the emitted C (next up)
-
-- **Locals as C variables** (no closures in the language, so escape analysis is trivial),
-  **unboxed `I64`** paths where the typechecker proves both operands int, **direct `bk_f<i>`
-  calls** for statically-known callees, and a **cached stack-top** flushed around helper calls
-  (what the JIT already does in a register). Goal: meet or beat the JIT on `make bench`.
+With the bootstrap, multi-instance VMs, portability/CI, the AOT compile-to-C backend, the
+scripting stdlib, and AOT performance parity done, the road points toward the long-term
+vision: a `--freestanding` profile good enough to boot a kernel written in brokm. In order:
 
 ### v0.15 — `--freestanding` runtime profile (the kernel path)
 

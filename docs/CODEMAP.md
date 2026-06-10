@@ -66,8 +66,10 @@ ShellStr Input Time TimeMs Sleep AppendFile FileExists ReadFile WriteFile`.
   `.expected` from verified output).
 - **New opcode**: enum in `chunk.h`, emit in `compiler.c`, semantics as a
   `jit_h_*` helper in `vm.c` called from the run-loop case, JIT walker either
-  inlines-with-guard or bails, `cemit.c` emits the helper call, disasm in
-  `debug.c`, `OPCODE_TABLE` in `natives.c` if brokm code should assemble it.
+  inlines-with-guard or bails, `cemit.c` emits the helper call (bracketed
+  `FLUSH(); ...; RELOAD();` — emitted code caches `vm->stackTop` in `sp`),
+  disasm in `debug.c`, `OPCODE_TABLE` in `natives.c` if brokm code should
+  assemble it.
 - **New syntax**: token in `lexer.c`/`token.h`, parse in `parser.c`, AST node
   in `ast.c/.h` (+free), check in `typecheck.c`, compile in `compiler.c`;
   consider whether the self-hosting compiler (`examples/realcc_*.bk`) needs it.
