@@ -80,7 +80,7 @@ static bool resolve_home(const char *argv0, char *home, size_t cap) {
     snprintf(home, cap, "%s", resolved);
   }
 
-  char probe[PATH_MAX];
+  char probe[PATH_MAX + 16]; /* room for home + "/src/vm.c" (gcc -Wformat-truncation) */
   snprintf(probe, sizeof(probe), "%s/src/vm.c", home);
   FILE *f = fopen(probe, "rb");
   if (f == NULL) {
