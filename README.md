@@ -5,7 +5,7 @@ language with a clean [HolyC](https://en.wikipedia.org/wiki/TempleOS#HolyC)-flav
 It is built primarily for its author's own use, with four design goals: **small, fast, robust,
 and easy to embed**.
 
-This is **v0.13**: a working bytecode VM with a precise, **generational** mark-sweep garbage
+This is **v1.0** — the first stable release: a working bytecode VM with a precise, **generational** mark-sweep garbage
 collector, aggregate types (arrays + classes/structs **with methods**), an opt-in
 **manual-memory** mode for low-level work, a **static type checker** that validates the HolyC type
 annotations before any code runs, **typed bytecode** that specializes the int hot path, a
@@ -49,7 +49,7 @@ make              # builds ./brokm  (-std=c99 -Wall -Wextra, 0 warnings)
 make test         # run the golden test suite
 make test-aot     # run the suite AOT-compiled to native executables
 make test-gc      # run the suite with the GC firing on every allocation
-make bench        # benchmark the JIT against the interpreter (Fib)
+make bench        # benchmark interpreter vs JIT vs AOT (Fib)
 make debug        # ASan/UBSan + bytecode/exec tracing build
 ```
 
@@ -190,7 +190,7 @@ typing stays correct. A **baseline JIT** (macOS + Linux, **arm64 + x86-64**) com
 native code in `mmap`'d executable pages — profile-gated, with inlined integer
 arithmetic/comparisons, branches, and recursion, deopt guards for correctness, and a full
 interpreter fallback for ineligible functions and every other platform. It runs the recursive
-`Fib` benchmark ~2× faster than the interpreter on each architecture (`make bench`). A **standard
+`Fib` benchmark ~2.5× faster than the interpreter on each architecture (`make bench`). A **standard
 library** of native builtins covers file I/O (`ReadFile`/`WriteFile`/`PrintErr`), strings
 (`CharAt`/`Chr`/`Substr`/`IndexOf`/`ToInt`/`ToStr`), and math
 (`Abs`/`Min`/`Max`/`Sqrt`/`Pow`/`Floor`/`Ceil`) — enough that `examples/lexer.bk` tokenizes and
@@ -212,8 +212,11 @@ the full matrix — including both JIT backends — to **Linux**, verified by a 
 turns bytecode into C on the same helper ABI the interpreter and JIT share, producing standalone
 native executables. The **scripting stdlib** (v0.13) added OS/process natives and the
 `lib/std/` modules written in brokm itself, installed and updated as one unit by `install.sh`.
-Next up: optimizing the emitted C — with a runtime in brokm as the long-term star. See the
-roadmap.
+**Optimized AOT** (v0.14) made the emitted C cache the VM stack top in a C local and call
+AOT-compiled callees directly — AOT binaries now beat the JIT on `make bench` — and AOT
+executables link only the runtime core (no parser/typechecker/compiler inside). Next up: a
+`--freestanding` runtime profile, the path toward booting a kernel written in brokm — with a
+runtime in brokm as the long-term star. See the roadmap.
 
 ## License
 

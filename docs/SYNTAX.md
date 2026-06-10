@@ -21,7 +21,10 @@ Split a program across files with `#include "path"`:
 ```
 
 - The path is resolved **relative to the directory of the including file** (the
-  top-level file is resolved relative to the current directory).
+  top-level file is resolved relative to the current directory), then against
+  `$BROKM_HOME/lib`, then `~/.brokm/lib` — which is how
+  `#include "std/str.bk"` finds the [standard library](../lib/std/) from any
+  script (v0.13).
 - Inclusion is **textual and flat**: the included file's declarations join the
   same global namespace, exactly as if pasted in — functions, classes (with
   methods), and globals are all shared. There is no per-module scoping.
@@ -238,6 +241,26 @@ File I/O:
 
 - `ReadFile(path)` — the whole file as a string, or `NULL` if it cannot be opened.
 - `WriteFile(path, contents)` — write a string to a file; returns a `Bool`.
+- `AppendFile(path, contents)` — append to a file (creating it); returns a `Bool`.
+- `FileExists(path)` — `Bool`: does the path exist?
+
+Scripting & OS (v0.13):
+
+- `Args()` — array of command-line arguments (after the script path; for an
+  AOT-compiled program, after the executable name).
+- `Env(name)` — the environment variable's value, or `NULL` if unset.
+- `Exit(code)` — terminate the process with `code`.
+- `Shell(cmd)` — run a shell command; returns its exit status (`-1` on failure).
+- `ShellStr(cmd)` — run a shell command; returns its captured stdout (including
+  any trailing newline), or `NULL` if the command could not start.
+- `Input()` — one line from stdin without the trailing newline, or `NULL` on EOF.
+- `Time()` / `TimeMs()` — seconds / milliseconds since the Unix epoch.
+- `Sleep(ms)` — pause for the given number of milliseconds.
+
+On top of these, [`lib/std/`](../lib/std/) is a standard library **written in
+brokm** (`StrSplit`, `ArrSort`, `PathJoin`, `ReadLines`, `EnvOr`, …) — pull it
+in with `#include "std/std.bk"` or per module; see
+[CODEMAP.md](CODEMAP.md) for the full listing.
 
 Math (`Abs`/`Min`/`Max` preserve int-vs-float; the rest return `F64`):
 

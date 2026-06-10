@@ -33,8 +33,8 @@ source.bk ──lexer──► tokens ──parser──► AST ──typecheck�
 | `natives.c` | ~900 | Stdlib primitives: print/format, maps, manual memory, strings, I/O, math, scripting/OS, self-hosting bridge |
 | `jit.c` | shared | JIT driver: page pool, thresholds, per-arch hooks, Value-layout self-test |
 | `jit_arm64.c` / `jit_x64.c` | ~430 ea | Per-arch encoders + chunk walker; faithful stack mirror of the interpreter |
-| `aot.c` | ~260 | `brokm build`: find runtime sources (`$BROKM_HOME` or argv0 dir), drive cc |
-| `cemit.c` | ~520 | Bytecode → C emitter (each chunk = a C function on the `jit_h_*` ABI) + `bk_bootstrap()` constant-graph rebuild |
+| `aot.c` | ~260 | `brokm build`: find runtime sources (`$BROKM_HOME` or argv0 dir), drive cc; links the runtime core only (`-DBK_NO_FRONTEND`) |
+| `cemit.c` | ~570 | Bytecode → C emitter (each chunk = a C function on the `jit_h_*` ABI, `sp`-cached stack top) + `bk_bootstrap()` constant-graph rebuild |
 | `api.c` + `include/brokm.h` | ~220 | Public embedding API: multi-instance VMs, value handles, host natives, `BROKM_VERSION` |
 | `debug.c` | small | Disassembler |
 | `common.h` | small | Limits (BK_FRAMES_MAX 256 etc.), build knobs (BK_NO_JIT, BK_DEBUG_STRESS_GC, …) |

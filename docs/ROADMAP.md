@@ -690,6 +690,18 @@ Dropped (recorded so nobody re-attempts them naively):
   unboxing needs guards + a deopt story per function, a much bigger project than the
   remaining ~20% win. Revisit if `--freestanding` (v0.15) makes AOT speed critical.
 
+## v1.0.0 — first stable release ✅ (2026-06)
+
+The first tagged, stable release. It bundles everything above — bytecode VM, generational
+GC, gradual static type checker, typed bytecode, baseline JIT (arm64 + x86-64), AOT
+compile-to-C (now meeting the JIT, linking the runtime core only), the self-hosting
+bootstrap, multi-instance embedding API, scripting stdlib + `lib/std/`, `install.sh`,
+editor support, and the macOS/Linux CI matrix — under the first stability promise:
+golden-test outputs are byte-identical across all four execution paths
+(interpreter / forced-JIT / AOT / GC-stress) on both platforms, and every release is cut
+only from a fully green matrix. Two v0.15 increments (front-end-free AOT link, `--cflags`)
+shipped early and are included.
+
 ## What's next
 
 With the bootstrap, multi-instance VMs, portability/CI, the AOT compile-to-C backend, the

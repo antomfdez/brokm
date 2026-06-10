@@ -98,15 +98,19 @@ through the **same runtime helpers** (`jit_h_*`, defined in `vm.c`):
    helpers, so the tiers cannot drift.
 2. **JIT** (v0.5) — hot functions compile to machine code: int arithmetic/branches inlined
    with tag-guard deopts, everything else a call into the same helpers.
-3. **AOT** (v0.12) — `brokm build` emits one C function per chunk (`bool bk_f<i>(Value *slots)`,
-   the `JitFn` signature): the interpreter specialized to that chunk, labels at jump targets,
-   guarded int fast paths for the typed opcodes, helpers for the rest. The bootstrap rebuilds
+3. **AOT** (v0.12, optimized v0.14) — `brokm build` emits one C function per chunk
+   (`bool bk_f<i>(Value *slots)`, the `JitFn` signature): the interpreter specialized to that
+   chunk, labels at jump targets, guarded int fast paths for the typed opcodes, helpers for the
+   rest. Each emitted function caches `vm->stackTop` in a C local (`sp`), flushed/reloaded
+   around helper calls — the same discipline the JIT applies with a register — and `OP_CALL`
+   invokes an AOT-compiled callee's `bk_f` directly when arity matches. The bootstrap rebuilds
    the constant graph inside shim `ObjFunction`s (pools populated, `chunk.code` empty — no
    bytecode ships) and sets `fn->nativeCode` to the emitted function, so the existing
    `call_function` dispatch routes `OP_CALL`, first-class function values, and `OP_INVOKE` to
    compiled code, and the GC roots everything through the script function as usual. The
-   generated `.c` is architecture-independent and compiles with the runtime sources under
-   `-DBK_NO_JIT`; the interpreter stays in the binary so dynamically assembled functions
+   generated `.c` is architecture-independent and compiles with the **runtime core only**
+   under `-DBK_NO_JIT -DBK_NO_FRONTEND` (v0.15: no lexer/parser/typechecker/compiler in the
+   link); the interpreter loop stays in the binary so dynamically assembled functions
    (`Assemble`) still run.
 
 ## Embedding model
