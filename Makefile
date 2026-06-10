@@ -9,7 +9,8 @@ SRC := $(wildcard src/*.c)
 OBJ := $(SRC:.c=.o)
 BIN := brokm
 
-.PHONY: all debug test bench embed test-embed test-selfcompile test-bootstrap clean
+.PHONY: all debug test bench embed test-embed test-selfcompile test-bootstrap \
+	test-fixpoint clean
 
 # Embedding demo: the library sources (minus the CLI main) + the host program.
 EMBED_SRC := $(filter-out src/main.c,$(SRC))
@@ -72,6 +73,17 @@ test-bootstrap: $(BIN)
 	  echo "bootstrap: OK (C compiler == realcc-compiled realcc)"; \
 	else \
 	  echo "bootstrap: FAIL"; diff /tmp/brokm-direct.out /tmp/brokm-boot.out; exit 1; \
+	fi
+
+# Three-stage bootstrap fixpoint: realcc compiles realcc (stage 1), the result
+# compiles realcc again (stage 2), and the two compiled compilers must be
+# byte-for-byte identical bytecode (examples/fixpoint.bk diffs them in-language).
+test-fixpoint: $(BIN)
+	@out=$$(./brokm examples/fixpoint.bk 2>&1); \
+	if [ "$$out" = "fixpoint: 1" ]; then \
+	  echo "fixpoint: OK (stage-1 == stage-2 bytecode)"; \
+	else \
+	  echo "fixpoint: FAIL"; echo "$$out"; exit 1; \
 	fi
 
 # Benchmark the JIT against the interpreter on a recursion-heavy program.

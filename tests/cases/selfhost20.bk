@@ -1,0 +1,6 @@
+// selfhost20: three-stage bootstrap fixpoint under the full test matrix — the
+// self-compiled realcc must re-compile realcc's source to byte-identical
+// bytecode. Like selfhost14/19, the ReadFile paths inside fixpoint.bk are
+// relative to the repo root (the test runner's working directory); the
+// #include resolves relative to this file.
+#include "../../examples/fixpoint.bk"

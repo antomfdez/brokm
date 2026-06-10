@@ -40,4 +40,4 @@ jobs:
         run: |
           make clean
           make
-          make test-embed test-selfcompile test-bootstrap
+          make test-embed test-selfcompile test-bootstrap test-fixpoint

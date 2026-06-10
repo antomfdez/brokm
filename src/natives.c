@@ -504,6 +504,28 @@ static Value native_assemble(int argc, Value *args) {
   ValueArray *code = &AS_ARRAY(args[0])->elements;
   ValueArray *consts = &AS_ARRAY(args[1])->elements;
 
+  /* Refuse what the C compiler refuses instead of silently wrapping: a
+   * constant operand is one byte, so a pool past 256 entries means some
+   * emitted index already wrapped and would resolve to the wrong constant
+   * (the self-hosting step-22 bug class); likewise any code byte outside
+   * 0..255 would be truncated by the U8 cast below. */
+  if (consts->count > 256) {
+    fprintf(stderr,
+            "Assemble: too many constants (%d); a chunk's one-byte operand "
+            "can address at most 256.\n",
+            consts->count);
+    return NIL_VAL;
+  }
+  for (int i = 0; i < code->count; i++) {
+    Value b = code->values[i];
+    if (!IS_INT(b) || AS_INT(b) < 0 || AS_INT(b) > 255) {
+      fprintf(stderr,
+              "Assemble: code byte at index %d is not an integer in 0..255.\n",
+              i);
+      return NIL_VAL;
+    }
+  }
+
   ObjFunction *fn = function_new();
   vm_push(OBJ_VAL(fn)); /* root across name interning + chunk growth */
   fn->arity = (argc >= 3 && IS_INT(args[2])) ? (int)AS_INT(args[2]) : 0;
@@ -518,8 +540,7 @@ static Value native_assemble(int argc, Value *args) {
     chunk_add_constant(&fn->chunk, consts->values[i]);
   }
   for (int i = 0; i < code->count; i++) {
-    I64 byte = IS_INT(code->values[i]) ? AS_INT(code->values[i]) : 0;
-    chunk_write(&fn->chunk, (U8)byte, 0);
+    chunk_write(&fn->chunk, (U8)AS_INT(code->values[i]), 0);
   }
   fn->jitDisabled = true;
   vm_pop();
@@ -560,6 +581,100 @@ static Value native_add_method(int argc, Value *args) {
   table_set(&klass->methods, AS_STRING(args[1]), args[2]);
   gc_write_barrier((Obj *)klass, args[2]);
   return args[0];
+}
+
+/* ---- bytecode introspection ------------------------------------------------
+ * Read-only views of a compiled function, so brokm code can compare two
+ * compiled artifacts structurally — the three-stage bootstrap fixpoint check
+ * (examples/fixpoint.bk) diffs the bytecode realcc emits for itself against
+ * what its self-compiled self emits. */
+
+/* ChunkCode(fn) -> a new array of the function's bytecode bytes, as ints. */
+static Value native_chunk_code(int argc, Value *args) {
+  if (argc < 1 || !IS_FUNCTION(args[0])) return NIL_VAL;
+  Chunk *chunk = &AS_FUNCTION(args[0])->chunk;
+  ObjArray *out = array_new();
+  /* Root the array: each array_append may allocate and trigger a collection. */
+  vm_push(OBJ_VAL(out));
+  for (int i = 0; i < chunk->count; i++) {
+    array_append(out, INT_VAL(chunk->code[i]));
+  }
+  vm_pop();
+  return OBJ_VAL(out);
+}
+
+/* ChunkConsts(fn) -> a new array of the function's constant-pool values, in
+ * pool order. Objects (nested functions, classes, strings) are by reference. */
+static Value native_chunk_consts(int argc, Value *args) {
+  if (argc < 1 || !IS_FUNCTION(args[0])) return NIL_VAL;
+  ValueArray *consts = &AS_FUNCTION(args[0])->chunk.constants;
+  ObjArray *out = array_new();
+  vm_push(OBJ_VAL(out));
+  for (int i = 0; i < consts->count; i++) {
+    array_append(out, consts->values[i]);
+  }
+  vm_pop();
+  return OBJ_VAL(out);
+}
+
+/* ValueDesc(v) -> a short structural description of a value: its kind, plus
+ * the identifying shape of a function ("fn:name/arity") or a class
+ * ("class:Name(field,...);methods=N"). Scalars and strings describe only their
+ * kind — their contents compare with == in brokm directly. */
+static Value native_value_desc(int argc, Value *args) {
+  if (argc < 1) return NIL_VAL;
+  Value v = args[0];
+  char buf[512];
+  const char *desc = "unknown";
+  switch (v.type) {
+    case VAL_NIL:   desc = "nil"; break;
+    case VAL_BOOL:  desc = "bool"; break;
+    case VAL_INT:   desc = "int"; break;
+    case VAL_FLOAT: desc = "float"; break;
+    case VAL_PTR:   desc = "ptr"; break;
+    case VAL_OBJ:
+      switch (OBJ_TYPE(v)) {
+        case OBJ_STRING: desc = "str"; break;
+        case OBJ_ARRAY:  desc = "array"; break;
+        case OBJ_MAP:    desc = "map"; break;
+        case OBJ_NATIVE:
+          snprintf(buf, sizeof buf, "native:%s", AS_NATIVE(v)->name->chars);
+          desc = buf;
+          break;
+        case OBJ_FUNCTION: {
+          ObjFunction *fn = AS_FUNCTION(v);
+          snprintf(buf, sizeof buf, "fn:%s/%d",
+                   fn->name != NULL ? fn->name->chars : "<script>", fn->arity);
+          desc = buf;
+          break;
+        }
+        case OBJ_INSTANCE:
+          snprintf(buf, sizeof buf, "instance:%s",
+                   AS_INSTANCE(v)->klass->name->chars);
+          desc = buf;
+          break;
+        case OBJ_CLASS: {
+          ObjClass *klass = AS_CLASS(v);
+          int methods = 0; /* live entries; Table.count includes tombstones */
+          for (int i = 0; i < klass->methods.capacity; i++) {
+            if (klass->methods.entries[i].key != NULL) methods++;
+          }
+          size_t off = (size_t)snprintf(buf, sizeof buf, "class:%s(",
+                                        klass->name->chars);
+          for (int i = 0; i < klass->fieldCount && off < sizeof buf; i++) {
+            off += (size_t)snprintf(buf + off, sizeof buf - off, "%s%s",
+                                    i > 0 ? "," : "", klass->fields[i]->chars);
+          }
+          if (off < sizeof buf) {
+            snprintf(buf + off, sizeof buf - off, ");methods=%d", methods);
+          }
+          desc = buf;
+          break;
+        }
+      }
+      break;
+  }
+  return OBJ_VAL(string_copy(desc, (int)strlen(desc)));
 }
 
 void natives_register(void) {
@@ -608,4 +723,7 @@ void natives_register(void) {
   vm_define_native("Assemble", native_assemble);
   vm_define_native("MakeClass", native_make_class);
   vm_define_native("AddMethod", native_add_method);
+  vm_define_native("ChunkCode", native_chunk_code);
+  vm_define_native("ChunkConsts", native_chunk_consts);
+  vm_define_native("ValueDesc", native_value_desc);
 }

@@ -214,6 +214,8 @@ static void register_natives(void) {
       "MapNew", "MapSet",    "MapGet",    "MapHas",  "MapDelete", "MapLen", "MapKeys",
       /* self-hosting: emit + run the C VM's real bytecode */
       "Opcode", "Assemble", "MakeClass", "AddMethod",
+      /* bytecode introspection (bootstrap fixpoint check) */
+      "ChunkCode", "ChunkConsts", "ValueDesc",
   };
   size_t n = sizeof(NAMES) / sizeof(NAMES[0]);
   for (size_t i = 0; i < n; i++) {

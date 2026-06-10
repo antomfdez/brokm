@@ -1,0 +1,4 @@
+Assemble: too many constants (300); a chunk's one-byte operand can address at most 256.
+returned nil: 1
+Assemble: code byte at index 0 is not an integer in 0..255.
+returned nil: 1

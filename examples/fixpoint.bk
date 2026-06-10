@@ -1,0 +1,60 @@
+// fixpoint.bk — three-stage bootstrap fixpoint check.
+//
+// Stage 1: the C-hosted realcc compiles realcc's own source. Stage 2: that
+// self-compiled realcc compiles the same source again. A faithful self-hosting
+// compiler is a fixpoint — both stages must emit byte-for-byte identical
+// bytecode, which SameFn checks structurally (code arrays, then constant
+// pools, recursing into nested function constants) via the ChunkCode /
+// ChunkConsts / ValueDesc natives. Run by `make test-fixpoint`.
+//
+// realcc's lexer has no #include, so the four modules are concatenated by
+// reading and joining their text, as in bootstrap.bk. Paths are relative to
+// the repo root, where the Makefile and the test runner invoke brokm.
+#include "realcc.bk"
+
+I64 SameFn(U0 a, U0 b);            // forward declaration (mutual recursion)
+
+// Two constants agree when their descriptions match and, for functions, their
+// chunks match recursively; ints and strings compare by value. A class carries
+// its name, field list, and method count in its description — realcc's own
+// classes (Tok/Node/Stmt) are field-only, so no method-body recursion is
+// needed here.
+I64 SameConst(U0 a, U0 b)
+{
+  U8 d = ValueDesc(a);
+  if (d != ValueDesc(b)) return 0;
+  if (IndexOf(d, "fn:") == 0) return SameFn(a, b);
+  if (d == "int" || d == "str" || d == "bool" || d == "float") return a == b;
+  return 1;
+}
+
+I64 SameFn(U0 a, U0 b)
+{
+  if (ValueDesc(a) != ValueDesc(b)) return 0;   // name + arity
+  U0[] ca = ChunkCode(a);
+  U0[] cb = ChunkCode(b);
+  if (Len(ca) != Len(cb)) return 0;
+  I64 i = 0;
+  while (i < Len(ca)) {
+    if (ca[i] != cb[i]) return 0;
+    i = i + 1;
+  }
+  U0[] ka = ChunkConsts(a);
+  U0[] kb = ChunkConsts(b);
+  if (Len(ka) != Len(kb)) return 0;
+  i = 0;
+  while (i < Len(ka)) {
+    if (!SameConst(ka[i], kb[i])) return 0;
+    i = i + 1;
+  }
+  return 1;
+}
+
+U8 rsrc = ReadFile("examples/realcc_types.bk") + ReadFile("examples/realcc_lex.bk")
+        + ReadFile("examples/realcc_parse.bk") + ReadFile("examples/realcc_gen.bk");
+
+U0 stage1 = Compile(rsrc);         // stage 1: C-hosted realcc compiles realcc
+stage1();                          // rebind Compile/... to the self-compiled realcc
+U0 stage2 = Compile(rsrc);         // stage 2: self-compiled realcc re-compiles realcc
+
+"fixpoint: %d\n", SameFn(stage1, stage2);

@@ -1,0 +1,13 @@
+// Assemble must refuse what the C compiler refuses instead of silently
+// wrapping: more than 256 constants (a chunk's one-byte operand cannot address
+// them — the bug class behind self-hosting step 22) and code bytes outside
+// 0..255. Failure is reported on stderr and NIL is returned. Everything here
+// prints to stderr so the ordering with the native's own message is
+// deterministic.
+U0[] big = [];
+I64 i = 0;
+while (i < 300) { Append(big, i); i = i + 1; }
+U0 f = Assemble([], big);
+PrintErr("returned nil: %d\n", f == NULL);
+U0 g = Assemble([999], []);
+PrintErr("returned nil: %d\n", g == NULL);
