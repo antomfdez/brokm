@@ -352,7 +352,7 @@ static bool emit_fn_body(FILE *out, Graph *g, int id) {
         fputs("  FLUSH(); if (!jit_h_negate()) return false; RELOAD();\n", out);
         break;
       case OP_NOT:
-        fputs("  PUSH(BOOL_VAL(!value_truthy(POP())));\n", out);
+        fputs("  { Value t = POP(); PUSH(BOOL_VAL(!value_truthy(t))); }\n", out);
         break;
       case OP_BIT_NOT:
         fputs("  FLUSH(); if (!jit_h_bit_not()) return false; RELOAD();\n", out);
@@ -462,7 +462,10 @@ bool cemit_program(ObjFunction *script, FILE *out) {
   /* v0.14: the stack pointer is cached in a C local (`sp`) per function, the
    * same discipline as the JIT's cached register: pure stack ops touch only
    * sp, and FLUSH/RELOAD bracket every jit_h_* helper call (helpers read and
-   * write vm->stackTop, including re-entering other bk_f functions). */
+   * write vm->stackTop, including re-entering other bk_f functions).
+   * These are macros, not inline functions, so PUSH(...POP()...) in one
+   * expression is unsequenced UB — emit a temp instead (the selfhost18
+   * 5! = 16 bug). */
   fputs("#define PUSH(v) (*sp++ = (v))\n"
         "#define POP() (*(--sp))\n"
         "#define PEEK(d) (sp[-1 - (d)])\n"
