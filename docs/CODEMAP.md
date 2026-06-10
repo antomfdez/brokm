@@ -29,7 +29,7 @@ source.bk ──lexer──► tokens ──parser──► AST ──typecheck�
 | `object.c/.h` | ~215 | Heap objects: string/function/native/array/class/instance/map |
 | `table.c/.h` | small | String-keyed hash table (interning, globals, methods, maps); `count` includes tombstones |
 | `memory.c` | small | `reallocate()` chokepoint — every GC trigger flows through here |
-| `gc.c` | ~230 | Generational mark-sweep; remembered set; `gc_write_barrier` (load-bearing, see CLAUDE.md) |
+| `gc.c` | ~230 | Generational mark-sweep; remembered set; `gc_write_barrier` (load-bearing: every store of a possibly-young object into a possibly-old one needs it — rooting an object does NOT make raw stores into it safe, since a minor GC can promote it mid-function) |
 | `natives.c` | ~900 | Stdlib primitives: print/format, maps, manual memory, strings, I/O, math, scripting/OS, self-hosting bridge |
 | `jit.c` | shared | JIT driver: page pool, thresholds, per-arch hooks, Value-layout self-test |
 | `jit_arm64.c` / `jit_x64.c` | ~430 ea | Per-arch encoders + chunk walker; faithful stack mirror of the interpreter |

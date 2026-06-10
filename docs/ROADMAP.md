@@ -664,7 +664,7 @@ brokm became a practical scripting language. Three pieces:
 
 Also: the Makefile now emits header dependencies (`-MMD -MP`), so editing a `.h` rebuilds
 exactly its dependents — the historical "stale object after a header edit" hazard is gone —
-and `CLAUDE.md` + `docs/CODEMAP.md` orient both humans and AI tools in the codebase.
+and `docs/CODEMAP.md` orients both humans and AI tools in the codebase.
 
 ## v0.14 — Optimize the emitted C ✅ (done)
 
