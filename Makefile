@@ -7,6 +7,7 @@ LDFLAGS += -lm   # libm for the math stdlib (no-op on macOS, required on Linux)
 
 SRC := $(wildcard src/*.c)
 OBJ := $(SRC:.c=.o)
+DEP := $(SRC:.c=.d)
 BIN := brokm
 
 .PHONY: all debug test test-aot bench embed test-embed test-selfcompile \
@@ -20,8 +21,12 @@ all: $(BIN)
 $(BIN): $(OBJ)
 	$(CC) $(CFLAGS) -o $@ $(OBJ) $(LDFLAGS)
 
+# -MMD -MP emits a .d makefile fragment per object, so editing any header
+# rebuilds exactly its dependents (no more stale-object builds after .h edits).
 src/%.o: src/%.c
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
+-include $(DEP)
 
 # Debug build: assertions, sanitizers, and bytecode/exec tracing.
 debug: CFLAGS += -O0 -g -fsanitize=address,undefined \
@@ -100,4 +105,4 @@ bench:
 	@echo "JIT:";         time /tmp/brokm-jit   bench/fib.bk
 
 clean:
-	rm -f $(OBJ) $(BIN) embed-demo
+	rm -f $(OBJ) $(DEP) $(BIN) embed-demo
