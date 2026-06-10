@@ -485,6 +485,10 @@ static const struct { const char *name; int op; } OPCODE_TABLE[] = {
     {"PRINT", OP_PRINT}, {"ARRAY", OP_ARRAY}, {"INDEX_GET", OP_INDEX_GET},
     {"INDEX_SET", OP_INDEX_SET}, {"GET_FIELD", OP_GET_FIELD},
     {"SET_FIELD", OP_SET_FIELD}, {"INVOKE", OP_INVOKE}, {"RETURN", OP_RETURN},
+    {"CONSTANT_W", OP_CONSTANT_W}, {"DEFINE_GLOBAL_W", OP_DEFINE_GLOBAL_W},
+    {"GET_GLOBAL_W", OP_GET_GLOBAL_W}, {"SET_GLOBAL_W", OP_SET_GLOBAL_W},
+    {"GET_FIELD_W", OP_GET_FIELD_W}, {"SET_FIELD_W", OP_SET_FIELD_W},
+    {"INVOKE_W", OP_INVOKE_W},
 };
 
 static Value native_opcode(int argc, Value *args) {

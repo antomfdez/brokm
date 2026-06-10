@@ -32,6 +32,24 @@ static int invoke_instruction(const char *name, Chunk *chunk, int offset) {
   return offset + 3;
 }
 
+/* Wide (16-bit big-endian constant index) forms. */
+static int constant16_instruction(const char *name, Chunk *chunk, int offset) {
+  int index = (chunk->code[offset + 1] << 8) | chunk->code[offset + 2];
+  printf("%-16s %4d '", name, index);
+  value_print(chunk->constants.values[index]);
+  printf("'\n");
+  return offset + 3;
+}
+
+static int invoke16_instruction(const char *name, Chunk *chunk, int offset) {
+  int index = (chunk->code[offset + 1] << 8) | chunk->code[offset + 2];
+  U8 argc = chunk->code[offset + 3];
+  printf("%-16s %4d '", name, index);
+  value_print(chunk->constants.values[index]);
+  printf("' (%d args)\n", argc);
+  return offset + 4;
+}
+
 static int jump_instruction(const char *name, int sign, Chunk *chunk,
                             int offset) {
   U16 jump = (U16)(chunk->code[offset + 1] << 8);
@@ -94,6 +112,18 @@ int disassemble_instruction(Chunk *chunk, int offset) {
     case OP_GET_FIELD: return constant_instruction("OP_GET_FIELD", chunk, offset);
     case OP_SET_FIELD: return constant_instruction("OP_SET_FIELD", chunk, offset);
     case OP_INVOKE: return invoke_instruction("OP_INVOKE", chunk, offset);
+    case OP_CONSTANT_W: return constant16_instruction("OP_CONSTANT_W", chunk, offset);
+    case OP_DEFINE_GLOBAL_W:
+      return constant16_instruction("OP_DEFINE_GLOBAL_W", chunk, offset);
+    case OP_GET_GLOBAL_W:
+      return constant16_instruction("OP_GET_GLOBAL_W", chunk, offset);
+    case OP_SET_GLOBAL_W:
+      return constant16_instruction("OP_SET_GLOBAL_W", chunk, offset);
+    case OP_GET_FIELD_W:
+      return constant16_instruction("OP_GET_FIELD_W", chunk, offset);
+    case OP_SET_FIELD_W:
+      return constant16_instruction("OP_SET_FIELD_W", chunk, offset);
+    case OP_INVOKE_W: return invoke16_instruction("OP_INVOKE_W", chunk, offset);
     case OP_IADD: return simple_instruction("OP_IADD", offset);
     case OP_ISUB: return simple_instruction("OP_ISUB", offset);
     case OP_IMUL: return simple_instruction("OP_IMUL", offset);

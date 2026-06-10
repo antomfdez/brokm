@@ -170,7 +170,15 @@ static int instr_len(const U8 *code, int offset) {
     case OP_JUMP_IF_TRUE:
     case OP_LOOP:
     case OP_INVOKE:
+    case OP_CONSTANT_W:
+    case OP_DEFINE_GLOBAL_W:
+    case OP_GET_GLOBAL_W:
+    case OP_SET_GLOBAL_W:
+    case OP_GET_FIELD_W:
+    case OP_SET_FIELD_W:
       return 3;
+    case OP_INVOKE_W:
+      return 4;
     default:
       return 1;
   }
@@ -434,6 +442,47 @@ static bool emit_fn_body(FILE *out, Graph *g, int id) {
         fputs("  { Value r = POP(); slots[0] = r; vm->stackTop = slots + 1; "
               "return true; }\n",
               out);
+        break;
+
+      /* Wide forms: same helpers as their narrow counterparts, with the
+       * 16-bit big-endian constant index decoded at emit time. */
+      case OP_CONSTANT_W:
+        fprintf(out, "  PUSH(K[%d]);\n",
+                (c->code[o + 1] << 8) | c->code[o + 2]);
+        break;
+      case OP_DEFINE_GLOBAL_W:
+        fprintf(out, "  FLUSH(); jit_h_define_global(AS_STRING(K[%d])); RELOAD();\n",
+                (c->code[o + 1] << 8) | c->code[o + 2]);
+        break;
+      case OP_GET_GLOBAL_W:
+        fprintf(out,
+                "  FLUSH(); if (!jit_h_get_global(AS_STRING(K[%d]))) return false; "
+                "RELOAD();\n",
+                (c->code[o + 1] << 8) | c->code[o + 2]);
+        break;
+      case OP_SET_GLOBAL_W:
+        fprintf(out,
+                "  FLUSH(); if (!jit_h_set_global(AS_STRING(K[%d]))) return false; "
+                "RELOAD();\n",
+                (c->code[o + 1] << 8) | c->code[o + 2]);
+        break;
+      case OP_GET_FIELD_W:
+        fprintf(out,
+                "  FLUSH(); if (!jit_h_get_field(AS_STRING(K[%d]))) return false; "
+                "RELOAD();\n",
+                (c->code[o + 1] << 8) | c->code[o + 2]);
+        break;
+      case OP_SET_FIELD_W:
+        fprintf(out,
+                "  FLUSH(); if (!jit_h_set_field(AS_STRING(K[%d]))) return false; "
+                "RELOAD();\n",
+                (c->code[o + 1] << 8) | c->code[o + 2]);
+        break;
+      case OP_INVOKE_W:
+        fprintf(out,
+                "  FLUSH(); if (!jit_h_invoke(AS_STRING(K[%d]), %d)) return "
+                "false; RELOAD();\n",
+                (c->code[o + 1] << 8) | c->code[o + 2], c->code[o + 3]);
         break;
 
       default:

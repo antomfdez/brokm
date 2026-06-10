@@ -328,6 +328,9 @@ static InterpretResult run_until(int baseFrameCount) {
   (frame->ip += 2, (U16)((frame->ip[-2] << 8) | frame->ip[-1]))
 #define READ_CONSTANT() (frame->function->chunk.constants.values[READ_BYTE()])
 #define READ_STRING() AS_STRING(READ_CONSTANT())
+#define READ_CONSTANT_W() \
+  (frame->function->chunk.constants.values[READ_SHORT()])
+#define READ_STRING_W() AS_STRING(READ_CONSTANT_W())
 #define BINARY(op)                       \
   do {                                   \
     if (!do_binary(op)) return BK_RUNTIME_ERROR; \
@@ -526,6 +529,32 @@ static InterpretResult run_until(int baseFrameCount) {
       case OP_SET_FIELD:
         if (!jit_h_set_field(READ_STRING())) return BK_RUNTIME_ERROR;
         break;
+      /* Wide forms: identical to their narrow counterparts with a 16-bit
+       * constant-index operand. Emitted when a chunk's pool passes 255. */
+      case OP_CONSTANT_W: vm_push(READ_CONSTANT_W()); break;
+      case OP_DEFINE_GLOBAL_W:
+        jit_h_define_global(READ_STRING_W());
+        break;
+      case OP_GET_GLOBAL_W:
+        if (!jit_h_get_global(READ_STRING_W())) return BK_RUNTIME_ERROR;
+        break;
+      case OP_SET_GLOBAL_W:
+        if (!jit_h_set_global(READ_STRING_W())) return BK_RUNTIME_ERROR;
+        break;
+      case OP_GET_FIELD_W:
+        if (!jit_h_get_field(READ_STRING_W())) return BK_RUNTIME_ERROR;
+        break;
+      case OP_SET_FIELD_W:
+        if (!jit_h_set_field(READ_STRING_W())) return BK_RUNTIME_ERROR;
+        break;
+      case OP_INVOKE_W: {
+        ObjString *name = READ_STRING_W();
+        int argCount = READ_BYTE();
+        if (!invoke_dispatch(name, argCount)) return BK_RUNTIME_ERROR;
+        frame = &vm->frames[vm->frameCount - 1];
+        break;
+      }
+
       case OP_RETURN: {
         Value result = vm_pop();
         vm->frameCount--;
@@ -551,6 +580,8 @@ static InterpretResult run_until(int baseFrameCount) {
 #undef READ_SHORT
 #undef READ_CONSTANT
 #undef READ_STRING
+#undef READ_CONSTANT_W
+#undef READ_STRING_W
 #undef BINARY
 }
 

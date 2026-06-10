@@ -60,7 +60,20 @@ typedef enum {
   OP_ILESS_EQUAL,
   OP_IGREATER,
   OP_IGREATER_EQUAL,
-  OP_RETURN
+  OP_RETURN,
+  /* Wide forms with a 16-bit big-endian constant-index operand, emitted when
+   * a chunk's pool outgrows the one-byte 256-constant limit (the top-level
+   * chunk holds one constant per declared function, so large multi-file
+   * programs get there first). Appended at the end of the enum so every
+   * existing opcode keeps its value — realcc-emitted bytecode and the
+   * byte-identical bootstrap stay valid. */
+  OP_CONSTANT_W,      /* operand: 16-bit constant index */
+  OP_DEFINE_GLOBAL_W, /* operand: 16-bit name constant index */
+  OP_GET_GLOBAL_W,    /* operand: 16-bit name constant index */
+  OP_SET_GLOBAL_W,    /* operand: 16-bit name constant index */
+  OP_GET_FIELD_W,     /* operand: 16-bit field-name constant index */
+  OP_SET_FIELD_W,     /* operand: 16-bit field-name constant index */
+  OP_INVOKE_W         /* operands: 16-bit method-name constant index, argument count */
 } OpCode;
 
 typedef struct {

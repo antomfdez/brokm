@@ -75,27 +75,43 @@ static bool same_constant(Value a, Value b) {
 static int make_constant(Value value) {
   /* Reuse an identical existing constant rather than appending a duplicate, so a
    * chunk with many repeated literals (e.g. the same global name referenced
-   * dozens of times) stays within the single-byte 256-constant limit. Distinct
-   * object constants such as functions and classes never compare equal, so each
-   * keeps its own slot. */
+   * dozens of times) keeps a small pool. Distinct object constants such as
+   * functions and classes never compare equal, so each keeps its own slot —
+   * which is why the top-level chunk of a large program outgrows one byte:
+   * indexes past 255 are reachable through the wide (_W) opcode forms, up to
+   * a 16-bit ceiling. */
   Chunk *chunk = current_chunk();
   for (int i = 0; i < chunk->constants.count; i++) {
     if (same_constant(chunk->constants.values[i], value)) return i;
   }
   int constant = chunk_add_constant(chunk, value);
-  if (constant > 255) {
+  if (constant > 0xffff) {
     compile_error("Too many constants in one chunk.");
     return 0;
   }
   return constant;
 }
 
-static void emit_constant(Value value) {
-  emit_bytes(OP_CONSTANT, (U8)make_constant(value));
+/* Emit an opcode with a constant-index operand, switching to its wide
+ * (16-bit big-endian) form when the index no longer fits in one byte.
+ * Indexes <= 255 emit exactly the bytes they always did, so programs under
+ * the old limit compile to byte-identical bytecode. */
+static void emit_const_op(U8 op, U8 wideOp, int index) {
+  if (index <= 255) {
+    emit_bytes(op, (U8)index);
+  } else {
+    emit_byte(wideOp);
+    emit_byte((U8)((index >> 8) & 0xff));
+    emit_byte((U8)(index & 0xff));
+  }
 }
 
-static U8 identifier_constant(ObjString *name) {
-  return (U8)make_constant(OBJ_VAL(name));
+static void emit_constant(Value value) {
+  emit_const_op(OP_CONSTANT, OP_CONSTANT_W, make_constant(value));
+}
+
+static int identifier_constant(ObjString *name) {
+  return make_constant(OBJ_VAL(name));
 }
 
 static int emit_jump(U8 op) {
@@ -255,7 +271,7 @@ static void compile_variable(Expr *expr) {
   if (slot != -1) {
     emit_bytes(OP_GET_LOCAL, (U8)slot);
   } else {
-    emit_bytes(OP_GET_GLOBAL, identifier_constant(name));
+    emit_const_op(OP_GET_GLOBAL, OP_GET_GLOBAL_W, identifier_constant(name));
   }
 }
 
@@ -266,7 +282,7 @@ static void compile_assign(Expr *expr) {
   if (slot != -1) {
     emit_bytes(OP_SET_LOCAL, (U8)slot);
   } else {
-    emit_bytes(OP_SET_GLOBAL, identifier_constant(name));
+    emit_const_op(OP_SET_GLOBAL, OP_SET_GLOBAL_W, identifier_constant(name));
   }
 }
 
@@ -305,7 +321,7 @@ static void compile_call(Expr *expr) {
   if (callee->kind == EXPR_FIELD) {
     compile_expr(callee->as.field.object);
     for (int i = 0; i < argc; i++) compile_expr(expr->as.call.args.items[i]);
-    emit_bytes(OP_INVOKE, identifier_constant(callee->as.field.name));
+    emit_const_op(OP_INVOKE, OP_INVOKE_W, identifier_constant(callee->as.field.name));
     emit_byte((U8)argc);
     return;
   }
@@ -336,13 +352,13 @@ static void compile_index_set(Expr *expr) {
 
 static void compile_field(Expr *expr) {
   compile_expr(expr->as.field.object);
-  emit_bytes(OP_GET_FIELD, identifier_constant(expr->as.field.name));
+  emit_const_op(OP_GET_FIELD, OP_GET_FIELD_W, identifier_constant(expr->as.field.name));
 }
 
 static void compile_field_set(Expr *expr) {
   compile_expr(expr->as.field_set.object);
   compile_expr(expr->as.field_set.value);
-  emit_bytes(OP_SET_FIELD, identifier_constant(expr->as.field_set.name));
+  emit_const_op(OP_SET_FIELD, OP_SET_FIELD_W, identifier_constant(expr->as.field_set.name));
 }
 
 static void compile_expr(Expr *expr) {
@@ -387,13 +403,13 @@ static ObjFunction *compile_method(Stmt *stmt);
 static void compile_var(Stmt *stmt) {
   ObjString *name = stmt->as.var.name;
   if (current->scopeDepth == 0) {
-    U8 global = identifier_constant(name);
+    int global = identifier_constant(name);
     if (stmt->as.var.init) {
       compile_expr(stmt->as.var.init);
     } else {
       emit_byte(OP_NIL);
     }
-    emit_bytes(OP_DEFINE_GLOBAL, global);
+    emit_const_op(OP_DEFINE_GLOBAL, OP_DEFINE_GLOBAL_W, global);
   } else {
     /* Compile the initializer before declaring the name so `I64 x = x;`
      * resolves the outer x rather than itself. */
@@ -590,8 +606,8 @@ static void compile_switch(Stmt *stmt) {
 static void compile_function_decl(Stmt *stmt) {
   if (stmt->as.func.body == NULL) return; /* forward declaration: nothing to emit */
   ObjFunction *fn = compile_function(stmt);
-  emit_bytes(OP_CONSTANT, (U8)make_constant(OBJ_VAL(fn)));
-  emit_bytes(OP_DEFINE_GLOBAL, identifier_constant(stmt->as.func.name));
+  emit_const_op(OP_CONSTANT, OP_CONSTANT_W, make_constant(OBJ_VAL(fn)));
+  emit_const_op(OP_DEFINE_GLOBAL, OP_DEFINE_GLOBAL_W, identifier_constant(stmt->as.func.name));
 }
 
 static void compile_class_decl(Stmt *stmt) {
@@ -606,8 +622,8 @@ static void compile_class_decl(Stmt *stmt) {
     ObjFunction *fn = compile_method(m);
     table_set(&klass->methods, m->as.func.name, OBJ_VAL(fn));
   }
-  emit_bytes(OP_CONSTANT, (U8)make_constant(OBJ_VAL(klass)));
-  emit_bytes(OP_DEFINE_GLOBAL, identifier_constant(stmt->as.klass.name));
+  emit_const_op(OP_CONSTANT, OP_CONSTANT_W, make_constant(OBJ_VAL(klass)));
+  emit_const_op(OP_DEFINE_GLOBAL, OP_DEFINE_GLOBAL_W, identifier_constant(stmt->as.klass.name));
 }
 
 static void compile_stmt(Stmt *stmt) {
