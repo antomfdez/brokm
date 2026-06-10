@@ -41,6 +41,7 @@
 
   section { padding: 44px 0; border-bottom: 1px solid var(--border); }
   h2 { font-size: 1.5rem; margin: 0 0 18px; }
+  section h3 { font-size: 1.08rem; margin: 26px 0 8px; }
   pre {
     background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
     padding: 18px 20px; overflow-x: auto; font-size: .92rem; line-height: 1.55;
@@ -131,6 +132,17 @@
   <div class="wrap">
     <h2>Get started</h2>
     <p class="note">Requires a C99 compiler and <span class="mono">make</span> — no external dependencies.</p>
+    <h3>Install</h3>
+    <p class="note">One script installs <em>and</em> updates — <span class="mono">~/.brokm</span> becomes a clone of the
+      repository holding the binary, the standard library, and the runtime sources
+      <span class="mono">brokm build</span> links against. Re-run it any time to update;
+      uninstall with <span class="mono">rm -rf ~/.brokm</span>.</p>
+<pre>curl -fsSL https://raw.githubusercontent.com/antomfdez/brokm/main/install.sh | sh</pre>
+    <p class="note">Then add to your shell profile (the script prints these):</p>
+<pre>export BROKM_HOME=<span class="s">"$HOME/.brokm"</span>
+export PATH=<span class="s">"$BROKM_HOME:$PATH"</span></pre>
+    <p class="note">Set <span class="mono">BROKM_HOME</span> before running the script to install somewhere else.</p>
+    <h3>Or build from a clone</h3>
     <ol class="steps">
       <li><code>git clone https://github.com/antomfdez/brokm</code></li>
       <li><code>cd brokm &amp;&amp; make</code> &nbsp;<span class="note">builds <span class="mono">./brokm</span> (0 warnings)</span></li>
