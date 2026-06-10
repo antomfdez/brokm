@@ -79,6 +79,7 @@
       <span class="badge">generational GC</span>
       <span class="badge">static type checker</span>
       <span class="badge">arm64 + x86-64 JIT</span>
+      <span class="badge">AOT → native binary</span>
       <span class="badge">stdlib</span>
     </div>
     <div class="cta">
@@ -119,6 +120,7 @@
       <div class="card"><h3>Manual memory</h3><p>Opt-in <span class="mono">MAlloc</span>/<span class="mono">Free</span> with typed peek/poke for low-level work — GC-invisible.</p></div>
       <div class="card"><h3>Static type checker</h3><p>Validates HolyC type annotations before execution; gradual, so existing code is unaffected.</p></div>
       <div class="card"><h3>Baseline JIT</h3><p>Profile-gated arm64 + x86-64 code generation for hot functions, ~2× faster on recursion, with a full interpreter fallback.</p></div>
+      <div class="card"><h3>AOT compiler</h3><p><span class="mono">brokm build app.bk -o app</span> translates a program to C and produces a standalone native executable — no bytecode in the binary.</p></div>
       <div class="card"><h3>Standard library</h3><p>File I/O, string ops, and math builtins — enough to write a brokm tokenizer in brokm.</p></div>
       <div class="card"><h3>Self-hosting</h3><p>A compiler written in brokm (<span class="mono">realcc.bk</span>) emits the VM's real bytecode and compiles its own source — byte-identical to the C compiler.</p></div>
     </div>
@@ -133,9 +135,11 @@
       <li><code>git clone https://github.com/antomfdez/brokm</code></li>
       <li><code>cd brokm &amp;&amp; make</code> &nbsp;<span class="note">builds <span class="mono">./brokm</span> (0 warnings)</span></li>
       <li><code>./brokm file.bk</code> &nbsp;<span class="note">run a program — or <code>./brokm</code> for the REPL</span></li>
+      <li><code>./brokm build file.bk -o app</code> &nbsp;<span class="note">AOT-compile to a standalone native executable</span></li>
     </ol>
 <pre>make           <span class="c"># build ./brokm</span>
 make test      <span class="c"># run the golden test suite</span>
+make test-aot  <span class="c"># run it AOT-compiled to native executables</span>
 make test-gc   <span class="c"># run it with the GC firing on every allocation</span>
 make bench     <span class="c"># benchmark the JIT against the interpreter</span></pre>
   </div>
