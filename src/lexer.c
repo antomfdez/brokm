@@ -300,16 +300,37 @@ static bool handle_include(Token *err) {
   memcpy(rel, p, (size_t)plen);
   rel[plen] = '\0';
 
-  /* Sized for dir + '/' + rel so the join can never truncate (realpath then
-   * bounds the canonical result to PATH_MAX). */
+  /* Resolution order: absolute paths as-is; otherwise relative to the
+   * including file's directory, then the standard-library search path —
+   * $BROKM_HOME/lib, then the default install location ~/.brokm/lib. The
+   * fallbacks are what let any script say #include "std/str.bk" without
+   * knowing where brokm lives. Buffers are sized dir + '/' + rel so the
+   * join can never truncate (realpath then bounds the result to PATH_MAX). */
   char joined[PATH_MAX * 2];
+  char canon[PATH_MAX];
+  bool found = false;
   if (rel[0] == '/') {
     snprintf(joined, sizeof(joined), "%s", rel);
+    found = realpath(joined, canon) != NULL;
   } else {
     snprintf(joined, sizeof(joined), "%s/%s", lexer.dir, rel);
+    found = realpath(joined, canon) != NULL;
+    if (!found) {
+      const char *home = getenv("BROKM_HOME");
+      if (home != NULL && *home != '\0') {
+        snprintf(joined, sizeof(joined), "%s/lib/%s", home, rel);
+        found = realpath(joined, canon) != NULL;
+      }
+    }
+    if (!found) {
+      const char *user = getenv("HOME");
+      if (user != NULL && *user != '\0') {
+        snprintf(joined, sizeof(joined), "%s/.brokm/lib/%s", user, rel);
+        found = realpath(joined, canon) != NULL;
+      }
+    }
   }
-  char canon[PATH_MAX];
-  if (realpath(joined, canon) == NULL) {
+  if (!found) {
     snprintf(errbuf, sizeof(errbuf), "Could not open #include \"%s\".", rel);
     *err = error_token(errbuf);
     return false;

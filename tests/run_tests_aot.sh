@@ -7,6 +7,11 @@ set -u
 
 BIN="./brokm"
 DIR="$(cd "$(dirname "$0")" && pwd)/cases"
+# The standard library lives in <repo>/lib; #include "std/..." resolves
+# through $BROKM_HOME/lib at build time (and aot.c probes the same variable
+# for the runtime sources).
+BROKM_HOME="$(cd "$(dirname "$0")/.." && pwd)"
+export BROKM_HOME
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 

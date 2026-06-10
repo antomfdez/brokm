@@ -4,6 +4,10 @@ set -u
 
 BIN="./brokm"
 DIR="$(cd "$(dirname "$0")" && pwd)/cases"
+# The standard library lives in <repo>/lib; #include "std/..." resolves
+# through $BROKM_HOME/lib (lexer.c handle_include).
+BROKM_HOME="$(cd "$(dirname "$0")/.." && pwd)"
+export BROKM_HOME
 
 if [ ! -x "$BIN" ]; then
   echo "error: $BIN not built (run 'make' first)"

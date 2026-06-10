@@ -1,0 +1,27 @@
+// std/io.bk + std/path.bk + std/os.bk + scripting natives golden test
+// (runner exports BROKM_HOME=repo root; cwd is the repo root).
+#include "std/std.bk"
+
+// io: write, read back, append.
+WriteLines("/tmp/brokm_std_os.txt", ["one", "two"]);
+AppendLine("/tmp/brokm_std_os.txt", "three");
+U0[] lines = ReadLines("/tmp/brokm_std_os.txt");
+"%d %s\n", Len(lines), StrJoin(lines, ",");
+"%d\n", ReadLines("/no/such/brokm/file") == NULL;
+
+// path
+"%s %s\n", PathJoin("a/b", "c.bk"), PathJoin("a/", "/abs");
+"%s %s %s %s\n", PathDir("/x/y/z.bk"), PathDir("plain"), PathBase("/x/y/z.bk"),
+    PathExt("a/z.tar.gz");
+
+// os + scripting natives (deterministic bits only)
+"%d %d\n", Shell("exit 3"), ShellOk("true");
+"%s", ShellStr("echo hi");
+U0[] sl = ShellLines("printf 'aa\nbb\n'");
+"%d %s %s\n", Len(sl), sl[0], sl[1];
+"%s %d\n", EnvOr("BROKM_NO_SUCH_VAR", "fallback"), Env("BROKM_NO_SUCH_VAR") == NULL;
+"%d %d\n", FileExists("Makefile"), FileExists("/no/such/brokm/file");
+"%d %d\n", Len(Args()), Time() > 1700000000;
+I64 t0 = TimeMs();
+Sleep(2);
+"%d\n", TimeMs() - t0 >= 1;

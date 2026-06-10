@@ -1,0 +1,42 @@
+// std/io.bk - line-oriented file I/O for the brokm standard library.
+//
+// Builds on the C natives ReadFile/WriteFile/AppendFile and std/str.bk.
+
+#include "str.bk"
+
+// ReadLines(path) - the file's lines as an array (no newline characters), or
+// NULL if the file cannot be read. A trailing final newline does not produce
+// an empty last element.
+U0[] ReadLines(U8 path)
+{
+  U8 text = ReadFile(path);
+  if (text == NULL) return NULL;
+  U0[] lines = StrSplit(text, "\n");
+  if (Len(lines) > 0 && lines[Len(lines) - 1] == "")
+    return ArrLinesDropLast(lines);
+  return lines;
+}
+
+// Internal: lines minus the final empty element (kept tiny and local; the
+// generic slice lives in std/arr.bk, which io deliberately does not pull in).
+U0[] ArrLinesDropLast(U0[] lines)
+{
+  U0[] out = [];
+  I64 i = 0;
+  for (i = 0; i < Len(lines) - 1; ++i) Append(out, lines[i]);
+  return out;
+}
+
+// WriteLines(path, lines) - write the lines joined with "\n" plus a final
+// newline; TRUE on success.
+Bool WriteLines(U8 path, U0[] lines)
+{
+  if (Len(lines) == 0) return WriteFile(path, "");
+  return WriteFile(path, StrJoin(lines, "\n") + "\n");
+}
+
+// AppendLine(path, line) - append one line (with newline); TRUE on success.
+Bool AppendLine(U8 path, U8 line)
+{
+  return AppendFile(path, line + "\n");
+}

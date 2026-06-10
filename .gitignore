@@ -11,3 +11,4 @@ src/*.o
 # Editor / OS cruft
 .DS_Store
 *.swp
+src/*.d

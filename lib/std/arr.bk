@@ -1,0 +1,122 @@
+// std/arr.bk - array utilities for the brokm standard library.
+//
+// Public names are prefixed Arr (modules share one flat namespace). Functions
+// that reorder elements return a NEW array and leave the argument untouched.
+// Element comparisons use == (value equality for ints/floats/bools/strings,
+// identity for instances/arrays/maps).
+
+#include "str.bk"  // StrCmp, for ArrSortStr
+
+// ArrIndexOf(xs, v) - index of the first element equal to v, or -1.
+I64 ArrIndexOf(U0[] xs, U0 v)
+{
+  I64 i = 0;
+  for (i = 0; i < Len(xs); ++i)
+    if (xs[i] == v) return i;
+  return -1;
+}
+
+// ArrContains(xs, v)
+Bool ArrContains(U0[] xs, U0 v)
+{
+  return ArrIndexOf(xs, v) >= 0;
+}
+
+// ArrSum(xs) - sum of numeric elements (starts from 0).
+I64 ArrSum(U0[] xs)
+{
+  I64 total = 0;
+  I64 i = 0;
+  for (i = 0; i < Len(xs); ++i) total = total + xs[i];
+  return total;
+}
+
+// ArrMin(xs) / ArrMax(xs) - smallest / largest element; NULL when empty.
+U0 ArrMin(U0[] xs)
+{
+  if (Len(xs) == 0) return NULL;
+  U0 best = xs[0];
+  I64 i = 1;
+  for (i = 1; i < Len(xs); ++i)
+    if (xs[i] < best) best = xs[i];
+  return best;
+}
+
+U0 ArrMax(U0[] xs)
+{
+  if (Len(xs) == 0) return NULL;
+  U0 best = xs[0];
+  I64 i = 1;
+  for (i = 1; i < Len(xs); ++i)
+    if (xs[i] > best) best = xs[i];
+  return best;
+}
+
+// ArrSlice(xs, start, len) - a new array of up to len elements from start,
+// clamped to bounds (mirrors Substr).
+U0[] ArrSlice(U0[] xs, I64 start, I64 len)
+{
+  U0[] out = [];
+  if (start < 0) start = 0;
+  if (len < 0) len = 0;
+  I64 i = start;
+  while (i < Len(xs) && i < start + len) {
+    Append(out, xs[i]);
+    ++i;
+  }
+  return out;
+}
+
+// ArrCopy(xs) - a new shallow copy.
+U0[] ArrCopy(U0[] xs)
+{
+  return ArrSlice(xs, 0, Len(xs));
+}
+
+// ArrReverse(xs) - a new array with the elements in reverse order.
+U0[] ArrReverse(U0[] xs)
+{
+  U0[] out = [];
+  I64 i = Len(xs) - 1;
+  while (i >= 0) {
+    Append(out, xs[i]);
+    i = i - 1;
+  }
+  return out;
+}
+
+// ArrSortStr(xs) - a new array of strings sorted ascending by StrCmp.
+U0[] ArrSortStr(U0[] xs)
+{
+  U0[] out = ArrCopy(xs);
+  I64 i = 1;
+  for (i = 1; i < Len(out); ++i) {
+    U0 key = out[i];
+    I64 j = i - 1;
+    while (j >= 0 && StrCmp(out[j], key) > 0) {
+      out[j + 1] = out[j];
+      j = j - 1;
+    }
+    out[j + 1] = key;
+  }
+  return out;
+}
+
+// ArrSort(xs) - a new NUMERICALLY sorted array (insertion sort; fine for
+// scripting-sized inputs). The VM's < is numeric-only - use ArrSortStr for
+// strings.
+U0[] ArrSort(U0[] xs)
+{
+  U0[] out = ArrCopy(xs);
+  I64 i = 1;
+  for (i = 1; i < Len(out); ++i) {
+    U0 key = out[i];
+    I64 j = i - 1;
+    while (j >= 0 && out[j] > key) {
+      out[j + 1] = out[j];
+      j = j - 1;
+    }
+    out[j + 1] = key;
+  }
+  return out;
+}

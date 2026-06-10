@@ -1,0 +1,53 @@
+// std/path.bk - file-path helpers for the brokm standard library.
+//
+// Pure string manipulation on '/'-separated paths (macOS + Linux).
+
+// PathLastSlash(p) - index of the last '/', or -1. Internal helper.
+I64 PathLastSlash(U8 p)
+{
+  I64 i = Len(p) - 1;
+  while (i >= 0) {
+    if (CharAt(p, i) == '/') return i;
+    i = i - 1;
+  }
+  return -1;
+}
+
+// PathJoin(a, b) - join two path segments with exactly one '/'. An absolute
+// b wins outright (like every path library).
+U8 PathJoin(U8 a, U8 b)
+{
+  if (Len(b) > 0 && CharAt(b, 0) == '/') return b;
+  if (Len(a) == 0) return b;
+  if (CharAt(a, Len(a) - 1) == '/') return a + b;
+  return a + "/" + b;
+}
+
+// PathDir(p) - the directory portion ("." if none, "/" for root entries).
+U8 PathDir(U8 p)
+{
+  I64 at = PathLastSlash(p);
+  if (at < 0) return ".";
+  if (at == 0) return "/";
+  return Substr(p, 0, at);
+}
+
+// PathBase(p) - the final component.
+U8 PathBase(U8 p)
+{
+  I64 at = PathLastSlash(p);
+  return Substr(p, at + 1, Len(p) - at - 1);
+}
+
+// PathExt(p) - the extension including the dot ("" if none). Dotfiles like
+// ".profile" have no extension.
+U8 PathExt(U8 p)
+{
+  U8 base = PathBase(p);
+  I64 i = Len(base) - 1;
+  while (i > 0) {
+    if (CharAt(base, i) == '.') return Substr(base, i, Len(base) - i);
+    i = i - 1;
+  }
+  return "";
+}

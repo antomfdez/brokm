@@ -1,0 +1,35 @@
+// std/os.bk - process and environment helpers for the brokm standard library.
+//
+// Builds on the C natives Env/Shell/ShellStr/Args and std/str.bk.
+
+#include "str.bk"
+
+// EnvOr(name, fallback) - the environment variable, or `fallback` if unset.
+U8 EnvOr(U8 name, U8 fallback)
+{
+  U8 v = Env(name);
+  if (v == NULL) return fallback;
+  return v;
+}
+
+// ShellLines(cmd) - the command's stdout as an array of lines (no newlines),
+// or NULL if the command could not start.
+U0[] ShellLines(U8 cmd)
+{
+  U8 out = ShellStr(cmd);
+  if (out == NULL) return NULL;
+  U0[] lines = StrSplit(out, "\n");
+  if (Len(lines) > 0 && lines[Len(lines) - 1] == "") {
+    U0[] trimmed = [];
+    I64 i = 0;
+    for (i = 0; i < Len(lines) - 1; ++i) Append(trimmed, lines[i]);
+    return trimmed;
+  }
+  return lines;
+}
+
+// ShellOk(cmd) - TRUE when the command exits 0.
+Bool ShellOk(U8 cmd)
+{
+  return Shell(cmd) == 0;
+}

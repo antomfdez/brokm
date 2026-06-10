@@ -1,0 +1,14 @@
+// std/str.bk golden test (runner exports BROKM_HOME=repo root).
+#include "std/str.bk"
+
+"%d %d %d %d\n", StrContains("hello world", "lo w"), StrStartsWith("brokm", "bro"),
+    StrEndsWith("brokm", "okm"), StrEndsWith("bk", "brokm");
+"%d %d\n", StrIndexOfFrom("abcabc", "bc", 2), StrIndexOfFrom("abcabc", "zz", 0);
+"[%s] [%s] [%s]\n", StrTrim("  mid  "), StrTrimLeft("  l"), StrTrimRight("r  ");
+
+U0[] parts = StrSplit("a,b,,c", ",");
+"%d %s\n", Len(parts), StrJoin(parts, "|");
+"%s\n", StrJoin([1, 2, 3], "+");
+"%s\n", StrReplace("aXbXc", "X", "--");
+"%s %s %s\n", StrRepeat("ab", 3), StrPadLeft("7", 3, "0"), StrPadRight("7", 3, ".");
+"%s %s\n", StrUpper("brOkm_1!"), StrLower("BrOKM_1!");

@@ -1,0 +1,12 @@
+// std/std.bk - the whole standard library in one include.
+//
+//   #include "std/std.bk"
+//
+// Modules resolve relative to this file first, so the umbrella works wherever
+// the lib directory lives ($BROKM_HOME/lib or ~/.brokm/lib).
+
+#include "str.bk"
+#include "arr.bk"
+#include "io.bk"
+#include "path.bk"
+#include "os.bk"

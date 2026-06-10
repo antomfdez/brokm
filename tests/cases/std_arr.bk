@@ -1,0 +1,16 @@
+// std/arr.bk golden test (runner exports BROKM_HOME=repo root).
+#include "std/arr.bk"
+#include "std/str.bk"
+
+U0[] xs = [5, 2, 8, 1, 8];
+"%d %d %d %d\n", ArrIndexOf(xs, 8), ArrIndexOf(xs, 99), ArrContains(xs, 1),
+    ArrContains(xs, 3);
+"%d %d %d\n", ArrSum(xs), ArrMin(xs), ArrMax(xs);
+"%s\n", StrJoin(ArrSort(xs), ",");
+"%s\n", StrJoin(xs, ",");
+"%s %s\n", StrJoin(ArrReverse(xs), ","), StrJoin(ArrSlice(xs, 1, 3), ",");
+"%d %d\n", ArrMin([]) == NULL, Len(ArrCopy(xs));
+
+U0[] words = ArrSortStr(["pear", "apple", "fig"]);
+"%s\n", StrJoin(words, " ");
+"%d %d %d\n", StrCmp("abc", "abd"), StrCmp("same", "same"), StrCmp("b", "ab");
