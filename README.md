@@ -5,17 +5,20 @@ language with a clean [HolyC](https://en.wikipedia.org/wiki/TempleOS#HolyC)-flav
 It is built primarily for its author's own use, with four design goals: **small, fast, robust,
 and easy to embed**.
 
-This is **v0.11**: a working bytecode VM with a precise, **generational** mark-sweep garbage
+This is **v0.13**: a working bytecode VM with a precise, **generational** mark-sweep garbage
 collector, aggregate types (arrays + classes/structs **with methods**), an opt-in
 **manual-memory** mode for low-level work, a **static type checker** that validates the HolyC type
 annotations before any code runs, **typed bytecode** that specializes the int hot path, a
 **baseline JIT** that compiles hot functions to native code (**arm64 + x86-64**, with a full
-interpreter fallback), a **standard library** (file I/O, strings, math), **string-keyed maps**,
-a **C embedding API** with **multi-instance VMs** (create any number of independent runtimes,
-register natives, exchange values, call brokm from C), and **multi-file programs** via
-`#include` — enough that a [compiler written in brokm](examples/realcc.bk) emits the VM's real
-bytecode and **compiles its own source** (`make test-bootstrap`, byte-identical to the C
-compiler — see [docs/ROADMAP.md](docs/ROADMAP.md)).
+interpreter fallback), an **AOT compiler** (`brokm build`) that turns a program into a
+standalone native executable, a **standard library** — native builtins (file I/O, strings,
+math, maps, **scripting**: `Args`/`Env`/`Shell`/`Input`/`Time`/…) plus
+[**`lib/std/` modules written in brokm**](lib/std/) (`#include "std/std.bk"`), a **C embedding
+API** with **multi-instance VMs** (create any number of independent runtimes, register natives,
+exchange values, call brokm from C), and **multi-file programs** via `#include` — enough that a
+[compiler written in brokm](examples/realcc.bk) emits the VM's real bytecode and **compiles its
+own source** (`make test-bootstrap`, byte-identical to the C compiler — see
+[docs/ROADMAP.md](docs/ROADMAP.md)).
 
 ```holyc
 // hello.bk — top-level code runs; a bare string statement prints.
@@ -56,6 +59,53 @@ compiler (options: `-o <out>`, `--emit=c`, `--keep-c`, `--cc <compiler>`,
 link the runtime: it looks next to the `brokm` executable, or wherever
 `BROKM_HOME` points.
 
+## Install & update
+
+Everything lives in one place — `~/.brokm` is a clone of this repository
+holding the binary, the standard library (`lib/`), and the runtime sources
+`brokm build` links against. One script installs *and* updates:
+
+```sh
+sh install.sh     # clone (or pull) ~/.brokm and build; re-run any time to update
+```
+
+Then add to your shell profile (the script prints these):
+
+```sh
+export BROKM_HOME="$HOME/.brokm"
+export PATH="$BROKM_HOME:$PATH"
+```
+
+Uninstall with `rm -rf ~/.brokm`. Set `BROKM_HOME` before running the script
+to install somewhere else.
+
+## Scripting & the standard library
+
+The native builtins cover scripting basics: `Args()` (command-line arguments),
+`Env`, `Exit`, `Shell` (exit status), `ShellStr` (captured stdout), `Input`
+(read a line), `Time`/`TimeMs`, `Sleep`, `ReadFile`/`WriteFile`/`AppendFile`,
+`FileExists`. On top of them, [`lib/std/`](lib/std/) is a standard library
+**written in brokm**, split into focused modules — `str`, `arr`, `io`, `path`,
+`os` — that any script can pull in by name (resolved via `$BROKM_HOME/lib`,
+falling back to `~/.brokm/lib`):
+
+```holyc
+#include "std/std.bk"   // or just "std/str.bk", etc.
+
+U0[] lines = ReadLines("/etc/hosts");
+"%d hosts lines\n", Len(lines);
+
+U0[] parts = StrSplit(EnvOr("PATH", ""), ":");
+"%s\n", StrJoin(ArrSortStr(parts), "\n");
+
+if (Len(Args()) > 0 && Args()[0] == "--touch")
+  AppendLine("log.txt", "ran at " + ToStr(Time()));
+```
+
+brokm has one flat namespace, so each module prefixes its public names
+(`Str*`, `Arr*`, `Path*`…). See [docs/CODEMAP.md](docs/CODEMAP.md) for the
+full listing.
+
 ## Language at a glance
 
 - **Types** (HolyC-style): `U0 U8 U16 U32 U64 I8 I16 I32 I64 F64 Bool`; default integer is `I64`.
@@ -75,7 +125,8 @@ link the runtime: it looks next to the `brokm` executable, or wherever
   with `MapHas`/`MapDelete`/`MapLen`/`MapKeys`.
 - **Control flow**: `if/else`, `while`, `for`, `do/while`, `switch/case/default`,
   `break`, `continue`, `return`.
-- **Multi-file**: `#include "lib.bk"` — textual, include-once, resolved relative to the file.
+- **Multi-file**: `#include "lib.bk"` — textual, include-once, resolved relative to the file,
+  then `$BROKM_HOME/lib`, then `~/.brokm/lib` (where the standard library lives).
 - **Operators**: `+ - * / %`, comparisons, `&& || !`, bitwise `& | ^ ~ << >>`,
   assignment + compound (`+=` …), `++ --`.
 
@@ -156,8 +207,12 @@ self-compiled compiler produces byte-identical output to the C compiler (`make t
 **Multi-instance VMs** (v0.11) made the runtime instance-based: any number of independent VMs per
 process, each with its own heap, globals, and collector. **Portability + CI** (v0.11.1) brought
 the full matrix — including both JIT backends — to **Linux**, verified by a GitHub Actions matrix
-(macOS arm64 + Linux x86-64, warnings as errors) on every push. Next up: bootstrap hardening —
-with a runtime in brokm as the long-term star. See the roadmap.
+(macOS arm64 + Linux x86-64, warnings as errors) on every push. The **AOT compiler** (v0.12)
+turns bytecode into C on the same helper ABI the interpreter and JIT share, producing standalone
+native executables. The **scripting stdlib** (v0.13) added OS/process natives and the
+`lib/std/` modules written in brokm itself, installed and updated as one unit by `install.sh`.
+Next up: optimizing the emitted C — with a runtime in brokm as the long-term star. See the
+roadmap.
 
 ## License
 

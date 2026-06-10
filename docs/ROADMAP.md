@@ -649,20 +649,39 @@ Can brokm compile itself? Eventually, yes — and brokm now hosts the front-end 
   compiler (`make test-bootstrap`). Still ahead — much later — a runtime in brokm, retiring the C
   bootstrap entirely. The baseline JIT matters here: a self-hosted compiler is compute-heavy.
 
+## v0.13 — Scripting stdlib + library distribution ✅ (done)
+
+brokm became a practical scripting language. Three pieces:
+
+- **Scripting natives** (`natives.c`): `Args()` (CLI arguments, plumbed through `main.c` and
+  the AOT-emitted `main`), `Env`, `Exit`, `Shell` (exit status), `ShellStr` (captured stdout),
+  `Input` (stdin line), `Time`/`TimeMs`, `Sleep`, `AppendFile`, `FileExists`.
+- **A standard library written in brokm** under `lib/std/` — `str.bk`, `arr.bk`, `io.bk`,
+  `path.bk`, `os.bk`, plus the `std.bk` umbrella. One flat namespace, so public names are
+  module-prefixed (`StrSplit`, `ArrSort`, `PathJoin`, …). `#include "std/str.bk"` works from
+  any script: the lexer resolves includes relative to the including file, then
+  `$BROKM_HOME/lib`, then `~/.brokm/lib`.
+- **Install/update in one place**: `install.sh` makes `~/.brokm` a clone of the repo (binary,
+  `lib/`, and the `src/` tree `brokm build` links against, together); re-running it updates.
+
+Also: the Makefile now emits header dependencies (`-MMD -MP`), so editing a `.h` rebuilds
+exactly its dependents — the historical "stale object after a header edit" hazard is gone —
+and `CLAUDE.md` + `docs/CODEMAP.md` orient both humans and AI tools in the codebase.
+
 ## What's next
 
-With the bootstrap, multi-instance VMs, portability/CI, and the AOT compile-to-C backend done,
-the road points toward the long-term vision: a `--freestanding` profile good enough to boot a
-kernel written in brokm. In order:
+With the bootstrap, multi-instance VMs, portability/CI, the AOT compile-to-C backend, and the
+scripting stdlib done, the road points toward the long-term vision: a `--freestanding` profile
+good enough to boot a kernel written in brokm. In order:
 
-### v0.13 — Optimize the emitted C (next up)
+### v0.14 — Optimize the emitted C (next up)
 
 - **Locals as C variables** (no closures in the language, so escape analysis is trivial),
   **unboxed `I64`** paths where the typechecker proves both operands int, **direct `bk_f<i>`
   calls** for statically-known callees, and a **cached stack-top** flushed around helper calls
   (what the JIT already does in a register). Goal: meet or beat the JIT on `make bench`.
 
-### v0.14 — `--freestanding` runtime profile (the kernel path)
+### v0.15 — `--freestanding` runtime profile (the kernel path)
 
 - A `BK_FREESTANDING` build of the runtime for `brokm build`: no libc natives (subset table),
   GC compiled out (manual `MAlloc`/`Free` + `Peek`/`Poke` already exist), no
