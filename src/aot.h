@@ -11,6 +11,9 @@ typedef struct {
   bool keepC;          /* --keep-c: keep the intermediate .c beside the exe */
   const char *cc;      /* --cc; NULL = $CC env else "cc" */
   const char *optFlag; /* optimization flag passed to cc, default "-O2" */
+  const char *cflags;  /* --cflags; extra cc/linker flags appended verbatim
+                          after the runtime sources (late, so -L/-l work with
+                          GNU ld and --target/-O overrides win); NULL = none */
   bool verbose;        /* print the cc command line */
   bool quiet;          /* suppress progress output */
 } AotOptions;

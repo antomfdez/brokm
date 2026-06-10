@@ -703,6 +703,17 @@ vision: a `--freestanding` profile good enough to boot a kernel written in brokm
   parser/typecheck/compiler/interpreter in the link, custom entry point, `--target`/linker
   passthrough. The v0.12 architecture was shaped so generated code depends only on the helper
   ABI + object constructors — both separable from the front end.
+- **Landed so far:** AOT binaries link the runtime core only (`-DBK_NO_FRONTEND` compiles
+  `interpret()` out of `vm.c`; 12 runtime TUs instead of 19, ~13% smaller binaries — the
+  interpreter loop itself stays because `Assemble`d functions run on it), and
+  `--cflags <flags>` passthrough (with `--cc`, covers `--target`/`-static`/`-L`/`-l`).
+- **Still open:** the `BK_FREESTANDING` flag itself — natives subset table (drop
+  Shell/Input/file IO/Time), `gc.c` compiled to a bump-allocator stub with collection off,
+  print via a pluggable `bk_putchar` hook instead of stdio, `-nostdlib` entry point
+  (`_start`-style, no `main`), and a `--freestanding` spelling on `brokm build` that implies
+  the define + drops `-lm`. Open design question: string/array/map objects allocate — decide
+  whether freestanding keeps the object heap (bump, never freed) or restricts programs to
+  scalars + `MAlloc`/`Peek`/`Poke` in a first cut.
 
 ### Hardening + deferred fixes
 

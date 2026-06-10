@@ -231,6 +231,9 @@ int aot_build(const char *srcPath, const char *argv0, const AotOptions *opt) {
     fit = fit && buf_append_quoted(cmd, sizeof(cmd), &len, home);
     fit = fit && buf_appendf(cmd, sizeof(cmd), &len, "/src/%s", RUNTIME_SRCS[i]);
   }
+  if (opt->cflags != NULL) {
+    fit = fit && buf_appendf(cmd, sizeof(cmd), &len, " %s", opt->cflags);
+  }
   fit = fit && buf_appendf(cmd, sizeof(cmd), &len, " -lm -o ");
   fit = fit && buf_append_quoted(cmd, sizeof(cmd), &len, outPath);
   if (!fit) {

@@ -55,7 +55,8 @@ make debug        # ASan/UBSan + bytecode/exec tracing build
 
 `brokm build` translates the compiled bytecode to C and drives the system C
 compiler (options: `-o <out>`, `--emit=c`, `--keep-c`, `--cc <compiler>`,
-`-O0`..`-O3`, `--verbose`, `--quiet`). The build needs the brokm source tree to
+`--cflags <flags>` for extra compiler/linker flags such as `--target=...` or
+`-static`, `-O0`..`-O3`, `--verbose`, `--quiet`). The build needs the brokm source tree to
 link the runtime: it looks next to the `brokm` executable, or wherever
 `BROKM_HOME` points.
 
