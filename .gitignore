@@ -12,3 +12,4 @@ src/*.o
 .DS_Store
 *.swp
 src/*.d
+CLAUDE.md
