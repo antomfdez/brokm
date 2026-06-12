@@ -391,9 +391,17 @@ static Expr *postfix(bool canAssign, Expr *left) {
     return left;
   }
   ObjString *name = left->as.variable.name;
-  Expr *one = make_literal(INT_VAL(1), line);
   TokenType base = (op == TOKEN_PLUS_PLUS) ? TOKEN_PLUS : TOKEN_MINUS;
-  return make_assign(name, make_binary(base, left, one, line), line);
+  TokenType undo = (op == TOKEN_PLUS_PLUS) ? TOKEN_MINUS : TOKEN_PLUS;
+  /* Postfix yields the PRE-increment value: `x++` evaluates to the old x and
+   * then stores x+1. Desugar to `(x = x ± 1) ∓ 1` — the assignment yields the
+   * new value, and undoing the step recovers the original (two's-complement
+   * wraparound makes this exact for ints). As a bare statement the result is
+   * discarded, so x is still incremented. Prefix `++x` (pre_incdec) yields the
+   * new value and stays a plain assignment. */
+  Expr *store = make_assign(
+      name, make_binary(base, left, make_literal(INT_VAL(1), line), line), line);
+  return make_binary(undo, store, make_literal(INT_VAL(1), line), line);
 }
 
 static Expr *array_literal(bool canAssign) {
