@@ -331,10 +331,12 @@ static Type check_binary(Expr *expr) {
     case TOKEN_LESS_EQ:
     case TOKEN_GREATER:
     case TOKEN_GREATER_EQ: {
-      bool lok = type_is_numeric(l) || l.kind == TY_UNKNOWN;
-      bool rok = type_is_numeric(r) || r.kind == TY_UNKNOWN;
+      /* Relational ops order numbers, and (since the VM compares strings
+       * lexicographically) strings; aggregates have no ordering. */
+      bool lok = type_is_numeric(l) || l.kind == TY_STRING || l.kind == TY_UNKNOWN;
+      bool rok = type_is_numeric(r) || r.kind == TY_STRING || r.kind == TY_UNKNOWN;
       if (!lok || !rok) {
-        tc_error(line, "operands of '%s' must be numeric (got %s and %s)",
+        tc_error(line, "operands of '%s' must be numbers or strings (got %s and %s)",
                  op_lexeme(op), type_name(l), type_name(r));
       }
       return ty(TY_BOOL);

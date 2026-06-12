@@ -296,9 +296,31 @@ static void concatenate(void) {
   vm_push(OBJ_VAL(result));
 }
 
+/* Lexicographic byte comparison of two strings: <0, 0, >0 (memcmp with a
+ * length tiebreak — unsigned-byte ordering, matching lib/std's StrCmp). */
+static int string_order(ObjString *a, ObjString *b) {
+  int n = a->length < b->length ? a->length : b->length;
+  int c = memcmp(a->chars, b->chars, (size_t)n);
+  return c != 0 ? c : a->length - b->length;
+}
+
 static bool do_binary(U8 op) {
   Value b = vm_pop();
   Value a = vm_pop();
+  /* Strings order lexicographically. This lives in the shared slow path, so the
+   * interpreter (BINARY), the JIT, and AOT (both deopt to jit_h_binary) all get
+   * it; the typed OP_I* forms never carry strings (statically TY_STRING). */
+  if (IS_STRING(a) && IS_STRING(b) &&
+      (op == OP_LESS || op == OP_LESS_EQUAL || op == OP_GREATER ||
+       op == OP_GREATER_EQUAL)) {
+    int c = string_order(AS_STRING(a), AS_STRING(b));
+    bool r = op == OP_LESS         ? c < 0
+             : op == OP_LESS_EQUAL ? c <= 0
+             : op == OP_GREATER    ? c > 0
+                                   : c >= 0;
+    vm_push(BOOL_VAL(r));
+    return true;
+  }
   Value out;
   switch (apply_binary(op, a, b, &out)) {
     case AR_OK:

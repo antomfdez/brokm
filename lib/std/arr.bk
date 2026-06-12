@@ -102,9 +102,9 @@ U0[] ArrSortStr(U0[] xs)
   return out;
 }
 
-// ArrSort(xs) - a new NUMERICALLY sorted array (insertion sort; fine for
-// scripting-sized inputs). The VM's < is numeric-only - use ArrSortStr for
-// strings.
+// ArrSort(xs) - a new sorted array (insertion sort; fine for scripting-sized
+// inputs). Orders numbers and strings - the VM's > compares strings
+// lexicographically. ArrSortStr is a thin alias kept for explicitness.
 U0[] ArrSort(U0[] xs)
 {
   U0[] out = ArrCopy(xs);
