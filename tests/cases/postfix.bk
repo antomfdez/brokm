@@ -1,0 +1,29 @@
+// Postfix ++/-- yield the PRE-increment value; prefix ++/-- yield the new one.
+I64 x = 5;
+I64 y = x++;
+"x=%d y=%d\n", x, y;
+
+I64 a = 5;
+I64 b = a--;
+"a=%d b=%d\n", a, b;
+
+I64 p = 5;
+I64 q = ++p;
+"p=%d q=%d\n", p, q;
+
+I64 m = 5;
+I64 n = --m;
+"m=%d n=%d\n", m, n;
+
+// As bare statements the variable is still stepped (result discarded).
+I64 c = 0;
+c++;
+c++;
+c--;
+"c=%d\n", c;
+
+// In expression position: the old value indexes the array, then i steps.
+I64[] arr = [10, 20, 30];
+I64 i = 0;
+I64 v = arr[i++];
+"v=%d i=%d\n", v, i;

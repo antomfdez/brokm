@@ -137,7 +137,7 @@ U8 StrPadRight(U8 s, I64 width, U8 pad)
 }
 
 // StrCmp(a, b) - lexicographic byte comparison: -1, 0, or 1. The VM's < and >
-// are numeric-only, so string ordering lives here.
+// also order strings now; StrCmp gives the three-way -1/0/1 form for sorts.
 I64 StrCmp(U8 a, U8 b)
 {
   I64 i = 0;

@@ -1,0 +1,25 @@
+// Lexicographic string ordering via the VM's relational operators.
+// (Results are bound to variables: a statement that begins with a string
+// literal is a HolyC print, not a bare comparison.)
+#include "std/arr.bk"
+
+I64 a = "abc" < "abd";       // c < d
+I64 b = "abc" < "abc";       // equal -> not less
+I64 c = "abc" <= "abc";      // equal -> <=
+I64 d = "abc" > "ab";        // longer, shares prefix
+I64 e = "Z" < "a";           // byte 90 < byte 97
+I64 f = "banana" > "apple";  // b > a
+I64 g = "" < "a";            // empty is smallest
+"%d %d %d %d %d %d %d\n", a, b, c, d, e, f, g;
+
+// Consistent in both directions and against equality.
+U8 x = "kiwi";
+U8 y = "mango";
+I64 consistent = x < y && y > x && !(x > y);
+"%d\n", consistent;
+
+// ArrSort (insertion sort over >) now orders strings, not just numbers.
+U8[] words = ["pear", "apple", "cherry", "banana"];
+U8[] sorted = ArrSort(words);
+I64 i = 0;
+for (i = 0; i < Len(sorted); ++i) "%s\n", sorted[i];

@@ -48,7 +48,8 @@ Flat namespace ⇒ module prefixes. `#include "std/std.bk"` pulls everything.
 | Module | Provides |
 |---|---|
 | `std/str.bk` | StrSplit/Join/Trim*/Replace/Contains/StartsWith/EndsWith/Repeat/Pad*/Upper/Lower/Cmp/IndexOfFrom/IsSpace |
-| `std/arr.bk` | ArrIndexOf/Contains/Sum/Min/Max/Slice/Copy/Reverse/Sort (numeric)/SortStr |
+| `std/arr.bk` | ArrIndexOf/Contains/Sum/Min/Max/Slice/Copy/Reverse/Sort/SortStr |
+| `std/map.bk` | MapGetOr/Copy/Merge/Values/KeysSorted |
 | `std/io.bk` | ReadLines/WriteLines/AppendLine |
 | `std/path.bk` | PathJoin/Dir/Base/Ext |
 | `std/os.bk` | EnvOr/ShellLines/ShellOk |
