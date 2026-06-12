@@ -115,7 +115,7 @@ void array_append(ObjArray *array, Value value); /* applies the GC write barrier
 ObjClass *class_new(ObjString *name, int fieldCount);
 ObjInstance *instance_new(ObjClass *klass);
 ObjMap *map_new(void);
-void map_set(ObjMap *map, ObjString *key, Value value); /* applies the GC write barrier */
+void map_set(ObjMap *map, ObjString *key, Value value); /* barriers key and value */
 
 void object_print(Value v);
 void object_free(Obj *obj);  /* free one object (used by the GC sweep) */

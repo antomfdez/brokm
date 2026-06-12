@@ -1,0 +1,12 @@
+// Write-barrier exercise for map keys. Keys are strong references too: if an
+// old map receives a fresh young key with a non-object value, the key survives
+// the next minor collection only if map_set records the old->young key edge.
+U0 box = MapNew();
+GcMinor();                       // box (a global root) is promoted to old
+GcDisable();                     // keep the concatenated key young until stored
+MapSet(box, "k" + "ey", 123);    // young key into the now-old map
+GcEnable();
+GcMinor();                       // minor skips old box; barrier keeps key alive
+GcMinor();
+U8 junk = "j" + "unk";           // occupies the freed key slot without barrier
+"%d\n", MapHas(box, "k" + "ey");

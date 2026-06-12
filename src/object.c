@@ -120,7 +120,8 @@ ObjMap *map_new(void) {
 
 void map_set(ObjMap *map, ObjString *key, Value value) {
   table_set(&map->table, key, value);
-  /* The store may create an old-map -> young-value edge. */
+  /* Map keys are strong too; either store may create an old -> young edge. */
+  gc_write_barrier((Obj *)map, OBJ_VAL(key));
   gc_write_barrier((Obj *)map, value);
 }
 
