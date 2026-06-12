@@ -202,8 +202,22 @@ the argument untouched. Element comparisons use `==`. Includes `std/str.bk` for
 | `ArrSlice(xs, start, len)` | `U0[]` | A new array of up to `len` elements from `start`, clamped to bounds. |
 | `ArrCopy(xs)` | `U0[]` | A new shallow copy. |
 | `ArrReverse(xs)` | `U0[]` | A new array with the elements reversed. |
-| `ArrSortStr(xs)` | `U0[]` | A new array of strings sorted ascending by `StrCmp`. |
-| `ArrSort(xs)` | `U0[]` | A new **numerically** sorted array (insertion sort). Use `ArrSortStr` for strings. |
+| `ArrSortStr(xs)` | `U0[]` | A new array of strings sorted ascending by `StrCmp` (alias kept for explicitness). |
+| `ArrSort(xs)` | `U0[]` | A new sorted array (insertion sort). Orders numbers and strings — the VM's `<`/`>` compare strings lexicographically. |
+
+## `std/map.bk` — map utilities
+
+Prefixed `Map`, built on the native map primitives (and never colliding with
+them). Helpers that build a new map leave their arguments untouched. Includes
+`std/arr.bk` for `MapKeysSorted`.
+
+| Function | Returns | Description |
+|---|---|---|
+| `MapGetOr(m, k, fallback)` | `U0` | The value for `k`, or `fallback` when `k` is absent (uses `MapHas`, so a stored `NULL` is distinguished from a missing key). |
+| `MapCopy(m)` | `U0` | A new map with the same entries (shallow). |
+| `MapMerge(a, b)` | `U0` | A new map: `a`'s entries overlaid by `b`'s (`b` wins on shared keys). |
+| `MapValues(m)` | `U0[]` | The values as an array, in `MapKeys` order. |
+| `MapKeysSorted(m)` | `U0[]` | The keys as a lexicographically sorted array. |
 
 ## `std/io.bk` — line-oriented file I/O
 

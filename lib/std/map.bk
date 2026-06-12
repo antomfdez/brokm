@@ -1,0 +1,54 @@
+// std/map.bk - map (string-keyed hash) utilities for the brokm standard library.
+//
+// Built on the native map primitives (MapNew/MapSet/MapGet/MapHas/MapDelete/
+// MapKeys/MapLen). Public names are prefixed Map and never collide with those
+// natives. Helpers that build a new map leave their arguments untouched.
+
+#include "arr.bk"  // ArrSort, for MapKeysSorted
+
+// MapGetOr(m, k, fallback) - the value for k, or fallback when k is absent.
+// MapGet alone returns NULL for a missing key, which a stored NULL would also
+// look like; MapHas tells the two apart.
+U0 MapGetOr(U0 m, U8 k, U0 fallback)
+{
+  if (MapHas(m, k)) return MapGet(m, k);
+  return fallback;
+}
+
+// MapCopy(m) - a new map with the same entries (shallow: values are shared).
+U0 MapCopy(U0 m)
+{
+  U0 out = MapNew();
+  U0[] ks = MapKeys(m);
+  I64 i = 0;
+  for (i = 0; i < Len(ks); ++i) MapSet(out, ks[i], MapGet(m, ks[i]));
+  return out;
+}
+
+// MapMerge(a, b) - a new map with a's entries overlaid by b's (b wins on shared
+// keys). Neither argument is modified.
+U0 MapMerge(U0 a, U0 b)
+{
+  U0 out = MapCopy(a);
+  U0[] ks = MapKeys(b);
+  I64 i = 0;
+  for (i = 0; i < Len(ks); ++i) MapSet(out, ks[i], MapGet(b, ks[i]));
+  return out;
+}
+
+// MapValues(m) - an array of the values, in MapKeys order.
+U0[] MapValues(U0 m)
+{
+  U0[] ks = MapKeys(m);
+  U0[] vs = [];
+  I64 i = 0;
+  for (i = 0; i < Len(ks); ++i) Append(vs, MapGet(m, ks[i]));
+  return vs;
+}
+
+// MapKeysSorted(m) - the keys as a lexicographically sorted array (stable
+// iteration order, handy for deterministic output).
+U0[] MapKeysSorted(U0 m)
+{
+  return ArrSort(MapKeys(m));
+}
