@@ -33,9 +33,9 @@
  * Assemble native) run on it, and jit.c stays for its BK_NO_JIT
  * jit_init/jit_shutdown stubs. */
 static const char *const RUNTIME_SRCS[] = {
-    "chunk.c",  "debug.c",   "gc.c",      "jit.c",   "jit_arm64.c",
-    "jit_x64.c", "memory.c", "natives.c", "object.c", "table.c",
-    "value.c",  "vm.c",
+    "chunk.c",   "debug.c",   "gc.c",      "jit.c",    "jit_arm64.c",
+    "jit_x64.c", "memory.c",  "natives.c", "object.c", "output.c",
+    "table.c",   "value.c",   "vm.c",
 };
 #define RUNTIME_SRC_COUNT (sizeof(RUNTIME_SRCS) / sizeof(RUNTIME_SRCS[0]))
 

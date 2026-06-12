@@ -27,6 +27,7 @@ source.bk ──lexer──► tokens ──parser──► AST ──typecheck�
 | `vm.c` | ~810 | The run loop (`run_until`), call/invoke dispatch, the `jit_h_*` semantic helpers all tiers share |
 | `value.c/.h` | small | 16-byte tagged `Value` (layout baked into JIT/AOT — asserted at startup) |
 | `object.c/.h` | ~215 | Heap objects: string/function/native/array/class/instance/map |
+| `output.c/.h` | small | The output seam: all program output flows through `bk_putchar` (the one function a freestanding host swaps); `bk_sink_*` format values to a `BkSink` (`bk_stdout`/`bk_stderr`) |
 | `table.c/.h` | small | String-keyed hash table (interning, globals, methods, maps); `count` includes tombstones |
 | `memory.c` | small | `reallocate()` chokepoint — every GC trigger flows through here |
 | `gc.c` | ~230 | Generational mark-sweep; remembered set; `gc_write_barrier` (load-bearing: every store of a possibly-young object into a possibly-old one needs it — rooting an object does NOT make raw stores into it safe, since a minor GC can promote it mid-function) |

@@ -15,6 +15,7 @@
 #include "gc.h"
 #include "natives.h"
 #include "object.h"
+#include "output.h"
 #include "vm.h"
 
 #define CONVERSIONS "diouxXeEfFgGcsp"
@@ -31,39 +32,42 @@ static F64 to_f64(Value v) {
   return 0.0;
 }
 
-/* Mirror value_print to an arbitrary stream (for the no-format-string path). */
-static void fprint_value(FILE *out, Value v) {
-  switch (v.type) {
-    case VAL_NIL:   fputs("nil", out); break;
-    case VAL_BOOL:  fputs(AS_BOOL(v) ? "TRUE" : "FALSE", out); break;
-    case VAL_INT:   fprintf(out, "%lld", (long long)AS_INT(v)); break;
-    case VAL_FLOAT: fprintf(out, "%g", AS_FLOAT(v)); break;
-    case VAL_OBJ:
-      if (IS_STRING(v)) fputs(AS_CSTRING(v), out);
-      else value_print(v);
-      break;
-    case VAL_PTR:   fputs(AS_PTR(v) != NULL ? "<ptr>" : "NULL", out); break;
-    default:        fputs("<unknown>", out); break;
-  }
-}
+/* Format one conversion into `s`. `flags` holds everything between '%' and the
+ * conversion char (width, precision, flags). brokm integers are 64-bit, so
+ * signed/unsigned integer conversions inject the `ll` length modifier. The
+ * conversion still runs through libc snprintf (into a buffer that grows if a
+ * width demands it), then the bytes are emitted to the sink — so output is
+ * byte-identical to the old fprintf path. */
+#define EMIT_SPEC(TYPE, ARG)                                            \
+  do {                                                                  \
+    char buf[256];                                                      \
+    int need = snprintf(buf, sizeof(buf), fmt, (TYPE)(ARG));            \
+    if (need >= 0 && need < (int)sizeof(buf)) {                         \
+      bk_sink_cstr(s, buf);                                             \
+    } else if (need > 0) {                                              \
+      char *big = malloc((size_t)need + 1);                            \
+      if (big != NULL) {                                                \
+        snprintf(big, (size_t)need + 1, fmt, (TYPE)(ARG));             \
+        bk_sink_cstr(s, big);                                          \
+        free(big);                                                      \
+      }                                                                 \
+    }                                                                   \
+  } while (0)
 
-/* `flags` holds everything between '%' and the conversion char (width,
- * precision, flags). brokm integers are 64-bit, so signed/unsigned integer
- * conversions inject the `ll` length modifier. */
-static void print_spec(FILE *out, const char *flags, char conv, Value v) {
+static void print_spec(BkSink *s, const char *flags, char conv, Value v) {
   char fmt[48];
   switch (conv) {
     case 'd':
     case 'i':
       snprintf(fmt, sizeof(fmt), "%%%slld", flags);
-      fprintf(out, fmt, (long long)to_i64(v));
+      EMIT_SPEC(long long, to_i64(v));
       break;
     case 'u':
     case 'o':
     case 'x':
     case 'X':
       snprintf(fmt, sizeof(fmt), "%%%sll%c", flags, conv);
-      fprintf(out, fmt, (unsigned long long)to_i64(v));
+      EMIT_SPEC(unsigned long long, to_i64(v));
       break;
     case 'e':
     case 'E':
@@ -72,31 +76,31 @@ static void print_spec(FILE *out, const char *flags, char conv, Value v) {
     case 'g':
     case 'G':
       snprintf(fmt, sizeof(fmt), "%%%s%c", flags, conv);
-      fprintf(out, fmt, to_f64(v));
+      EMIT_SPEC(double, to_f64(v));
       break;
     case 'c':
       snprintf(fmt, sizeof(fmt), "%%%sc", flags);
-      fprintf(out, fmt, (int)to_i64(v));
+      EMIT_SPEC(int, (int)to_i64(v));
       break;
     case 's':
       snprintf(fmt, sizeof(fmt), "%%%ss", flags);
-      fprintf(out, fmt, IS_STRING(v) ? AS_CSTRING(v) : "");
+      EMIT_SPEC(const char *, IS_STRING(v) ? AS_CSTRING(v) : "");
       break;
     default:
-      fputc(conv, out);
+      s->emit(conv);
       break;
   }
 }
 
-/* printf-style formatting to `out`. bk_format() is the stdout wrapper used by
- * OP_PRINT and Print(); PrintErr() targets stderr. */
-static Value bk_format_to(FILE *out, int argc, Value *args) {
+/* printf-style formatting to a byte sink. bk_format() targets bk_stdout (the
+ * OP_PRINT / Print() path); PrintErr() targets bk_stderr. */
+static Value bk_format_sink(BkSink *s, int argc, Value *args) {
   if (argc == 0) return NIL_VAL;
 
   if (!IS_STRING(args[0])) {
     for (int i = 0; i < argc; i++) {
-      if (i > 0) fputc(' ', out);
-      fprint_value(out, args[i]);
+      if (i > 0) s->emit(' ');
+      bk_sink_value(s, args[i]);
     }
     return NIL_VAL;
   }
@@ -105,12 +109,12 @@ static Value bk_format_to(FILE *out, int argc, Value *args) {
   int ai = 1;
   for (const char *p = fmt; *p != '\0'; p++) {
     if (*p != '%') {
-      fputc(*p, out);
+      s->emit(*p);
       continue;
     }
     p++;
     if (*p == '%') {
-      fputc('%', out);
+      s->emit('%');
       continue;
     }
     char flags[32];
@@ -121,16 +125,18 @@ static Value bk_format_to(FILE *out, int argc, Value *args) {
     flags[f] = '\0';
     if (*p == '\0') break;
     Value v = (ai < argc) ? args[ai++] : NIL_VAL;
-    print_spec(out, flags, *p, v);
+    print_spec(s, flags, *p, v);
   }
   return NIL_VAL;
 }
 
-Value bk_format(int argc, Value *args) { return bk_format_to(stdout, argc, args); }
+Value bk_format(int argc, Value *args) {
+  return bk_format_sink(&bk_stdout, argc, args);
+}
 
 static Value native_print(int argc, Value *args) { return bk_format(argc, args); }
 static Value native_print_err(int argc, Value *args) {
-  return bk_format_to(stderr, argc, args);
+  return bk_format_sink(&bk_stderr, argc, args);
 }
 
 /* Force a full (major) garbage collection. Returns nil. */
