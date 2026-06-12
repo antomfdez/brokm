@@ -39,6 +39,11 @@ static void runtime_error(const char *format, ...) {
   va_end(args);
   fputs("\n", stderr);
 
+  if (vm->frameCount == 0 && vm->aotLine > 0) {
+    fprintf(stderr, "[line %d] in %s\n", vm->aotLine,
+            vm->aotFrameName != NULL ? vm->aotFrameName : "<script>");
+  }
+
   for (int i = vm->frameCount - 1; i >= 0; i--) {
     CallFrame *frame = &vm->frames[i];
     ObjFunction *fn = frame->function;
@@ -212,7 +217,7 @@ static bool invoke_dispatch(ObjString *name, int argCount) {
   return call_function(AS_FUNCTION(method), argCount);
 }
 
-typedef enum { AR_OK, AR_NOT_NUM, AR_NOT_INT, AR_DIV0 } ArStatus;
+typedef enum { AR_OK, AR_NOT_NUM, AR_NOT_INT, AR_DIV0, AR_BAD_SHIFT } ArStatus;
 
 static ArStatus apply_binary(U8 op, Value a, Value b, Value *out) {
   if (!IS_NUMBER(a) || !IS_NUMBER(b)) return AR_NOT_NUM;
@@ -269,11 +274,13 @@ static ArStatus apply_binary(U8 op, Value a, Value b, Value *out) {
       return AR_OK;
     case OP_SHL:
       if (!bothInt) return AR_NOT_INT;
-      *out = INT_VAL(AS_INT(a) << AS_INT(b));
+      if (AS_INT(b) < 0 || AS_INT(b) >= 64) return AR_BAD_SHIFT;
+      *out = INT_VAL((I64)((U64)AS_INT(a) << (U8)AS_INT(b)));
       return AR_OK;
     case OP_SHR:
       if (!bothInt) return AR_NOT_INT;
-      *out = INT_VAL(AS_INT(a) >> AS_INT(b));
+      if (AS_INT(b) < 0 || AS_INT(b) >= 64) return AR_BAD_SHIFT;
+      *out = INT_VAL(AS_INT(a) >> (U8)AS_INT(b));
       return AR_OK;
     default:
       return AR_NOT_NUM;
@@ -331,6 +338,9 @@ static bool do_binary(U8 op) {
       return false;
     case AR_NOT_INT:
       runtime_error("Operands must be integers.");
+      return false;
+    case AR_BAD_SHIFT:
+      runtime_error("Shift count out of range.");
       return false;
     default:
       runtime_error("Operands must be numbers.");

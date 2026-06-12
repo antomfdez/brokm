@@ -3,6 +3,7 @@
 
 #include "memory.h"
 #include "object.h"
+#include "output.h"
 #include "value.h"
 
 void value_array_init(ValueArray *array) {
@@ -53,14 +54,6 @@ bool value_equal(Value a, Value b) {
   }
 }
 
-void value_print(Value v) {
-  switch (v.type) {
-    case VAL_NIL:   printf("nil"); break;
-    case VAL_BOOL:  printf(AS_BOOL(v) ? "TRUE" : "FALSE"); break;
-    case VAL_INT:   printf("%lld", (long long)AS_INT(v)); break;
-    case VAL_FLOAT: printf("%g", AS_FLOAT(v)); break;
-    case VAL_OBJ:   object_print(v); break;
-    case VAL_PTR:   printf(AS_PTR(v) != NULL ? "<ptr>" : "NULL"); break;
-    default:        printf("<unknown>"); break;
-  }
-}
+/* Display a value on stdout (the program output sink). The switch itself lives
+ * in bk_sink_value so it can target any sink (stdout, stderr, freestanding). */
+void value_print(Value v) { bk_sink_value(&bk_stdout, v); }

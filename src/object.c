@@ -5,6 +5,7 @@
 #include "gc.h"
 #include "memory.h"
 #include "object.h"
+#include "output.h"
 #include "table.h"
 #include "vm.h"
 
@@ -119,41 +120,56 @@ ObjMap *map_new(void) {
 
 void map_set(ObjMap *map, ObjString *key, Value value) {
   table_set(&map->table, key, value);
-  /* The store may create an old-map -> young-value edge. */
+  /* Map keys are strong too; either store may create an old -> young edge. */
+  gc_write_barrier((Obj *)map, OBJ_VAL(key));
   gc_write_barrier((Obj *)map, value);
 }
 
-static void print_function(ObjFunction *function) {
+static void print_function(BkSink *s, ObjFunction *function) {
   if (function->name == NULL) {
-    printf("<script>");
+    bk_sink_cstr(s, "<script>");
     return;
   }
-  printf("<func %s>", function->name->chars);
+  bk_sink_cstr(s, "<func ");
+  bk_sink_cstr(s, function->name->chars);
+  bk_sink_cstr(s, ">");
 }
 
-static void print_array(ObjArray *array) {
-  printf("[");
+static void print_array(BkSink *s, ObjArray *array) {
+  bk_sink_cstr(s, "[");
   for (int i = 0; i < array->elements.count; i++) {
-    if (i > 0) printf(", ");
-    value_print(array->elements.values[i]);
+    if (i > 0) bk_sink_cstr(s, ", ");
+    bk_sink_value(s, array->elements.values[i]);
   }
-  printf("]");
+  bk_sink_cstr(s, "]");
 }
 
-void object_print(Value v) {
+void object_print_sink(BkSink *s, Value v) {
   switch (OBJ_TYPE(v)) {
-    case OBJ_STRING:   printf("%s", AS_CSTRING(v)); break;
-    case OBJ_FUNCTION: print_function(AS_FUNCTION(v)); break;
-    case OBJ_NATIVE:   printf("<native %s>", AS_NATIVE(v)->name->chars); break;
-    case OBJ_ARRAY:    print_array(AS_ARRAY(v)); break;
-    case OBJ_CLASS:    printf("<class %s>", AS_CLASS(v)->name->chars); break;
-    case OBJ_INSTANCE:
-      printf("<%s instance>", AS_INSTANCE(v)->klass->name->chars);
+    case OBJ_STRING:   bk_sink_cstr(s, AS_CSTRING(v)); break;
+    case OBJ_FUNCTION: print_function(s, AS_FUNCTION(v)); break;
+    case OBJ_NATIVE:
+      bk_sink_cstr(s, "<native ");
+      bk_sink_cstr(s, AS_NATIVE(v)->name->chars);
+      bk_sink_cstr(s, ">");
       break;
-    case OBJ_MAP:      printf("<map>"); break;
-    default:           printf("<obj>"); break;
+    case OBJ_ARRAY:    print_array(s, AS_ARRAY(v)); break;
+    case OBJ_CLASS:
+      bk_sink_cstr(s, "<class ");
+      bk_sink_cstr(s, AS_CLASS(v)->name->chars);
+      bk_sink_cstr(s, ">");
+      break;
+    case OBJ_INSTANCE:
+      bk_sink_cstr(s, "<");
+      bk_sink_cstr(s, AS_INSTANCE(v)->klass->name->chars);
+      bk_sink_cstr(s, " instance>");
+      break;
+    case OBJ_MAP:      bk_sink_cstr(s, "<map>"); break;
+    default:           bk_sink_cstr(s, "<obj>"); break;
   }
 }
+
+void object_print(Value v) { object_print_sink(&bk_stdout, v); }
 
 void object_free(Obj *obj) {
   switch (obj->type) {

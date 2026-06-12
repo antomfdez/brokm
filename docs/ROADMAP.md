@@ -717,8 +717,14 @@ vision: a `--freestanding` profile good enough to boot a kernel written in brokm
   ABI + object constructors — both separable from the front end.
 - **Landed so far:** AOT binaries link the runtime core only (`-DBK_NO_FRONTEND` compiles
   `interpret()` out of `vm.c`; 12 runtime TUs instead of 19, ~13% smaller binaries — the
-  interpreter loop itself stays because `Assemble`d functions run on it), and
-  `--cflags <flags>` passthrough (with `--cc`, covers `--target`/`-static`/`-L`/`-l`).
+  interpreter loop itself stays because `Assemble`d functions run on it),
+  `--cflags <flags>` passthrough (with `--cc`, covers `--target`/`-static`/`-L`/`-l`), and
+  the **output seam** (`output.c`): every byte a program prints now flows through one
+  `bk_putchar` — the single function a freestanding host replaces with serial/VGA/syscall
+  output — with `bk_sink_*` formatting values to a `BkSink` (`bk_stdout`/`bk_stderr`).
+  Value/object printing and the `Print`/`OP_PRINT` formatter were unified onto it; the
+  only libc left in that path is the `snprintf` number conversions, localized to
+  `output.c` for the freestanding phase to replace. Byte-identical across all five paths.
 - **Still open:** the `BK_FREESTANDING` flag itself — natives subset table (drop
   Shell/Input/file IO/Time), `gc.c` compiled to a bump-allocator stub with collection off,
   print via a pluggable `bk_putchar` hook instead of stdio, `-nostdlib` entry point

@@ -276,6 +276,13 @@ static bool emit_fn_body(FILE *out, Graph *g, int id) {
   for (int o = 0; o < c->count; o += instr_len(c->code, o)) {
     if (isTarget[o]) fprintf(out, "L_%04d:\n", o);
     U8 op = c->code[o];
+    fputs("  vm->aotFrameName = ", out);
+    if (fn->name != NULL) {
+      emit_c_string(out, fn->name->chars, fn->name->length);
+    } else {
+      emit_c_string(out, "<script>", 8);
+    }
+    fprintf(out, "; vm->aotLine = %d;\n", c->lines[o]);
 
     TypedOp t;
     const char *gname;

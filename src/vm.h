@@ -17,6 +17,8 @@ typedef struct {
   int frameCount;
   Value stack[BK_STACK_MAX];
   Value *stackTop;
+  const char *aotFrameName;
+  int aotLine;
   Table globals;
   Table strings; /* interned string set (weak references) */
   Obj *objects;  /* intrusive list of every heap object */
