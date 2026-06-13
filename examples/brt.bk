@@ -55,6 +55,28 @@ U0 BRT_Print(U0[] stack, I64 sp, I64 argc)
   PrintErr("brt: OP_PRINT arity not implemented: %d\n", argc);
 }
 
+U0 BRT_GetGlobal(U0 globals, U8 name)
+{
+  if (MapHas(globals, name)) return MapGet(globals, name);
+  if (name == "Len" || name == "Append") return name;
+  return NULL;
+}
+
+U0 BRT_CallNative(U8 name, U0[] args)
+{
+  if (name == "Len") {
+    if (Len(args) < 1) return 0;
+    return Len(args[0]);
+  }
+  if (name == "Append") {
+    if (Len(args) < 2) return NULL;
+    Append(args[0], args[1]);
+    return args[0];
+  }
+  PrintErr("brt: native not implemented: %s\n", name);
+  return NULL;
+}
+
 U0 BRT_RunFunctionWithGlobals(U0 fn, U0[] args, U0 globals);
 
 U0 BRT_RunFrame(U0 fn, U0 globals, U0[] stack, I64 sp)
@@ -92,13 +114,13 @@ U0 BRT_RunFrame(U0 fn, U0 globals, U0[] stack, I64 sp)
       MapSet(globals, consts[BRT_ReadU16(code, ip)], stack[sp]);
       ip = ip + 2;
     } else if (op == BRT_GET_GLOBAL) {
-      if (sp < Len(stack)) stack[sp] = MapGet(globals, consts[code[ip]]);
-      else Append(stack, MapGet(globals, consts[code[ip]]));
+      if (sp < Len(stack)) stack[sp] = BRT_GetGlobal(globals, consts[code[ip]]);
+      else Append(stack, BRT_GetGlobal(globals, consts[code[ip]]));
       sp = sp + 1;
       ip = ip + 1;
     } else if (op == BRT_GET_GLOBAL_W) {
-      if (sp < Len(stack)) stack[sp] = MapGet(globals, consts[BRT_ReadU16(code, ip)]);
-      else Append(stack, MapGet(globals, consts[BRT_ReadU16(code, ip)]));
+      if (sp < Len(stack)) stack[sp] = BRT_GetGlobal(globals, consts[BRT_ReadU16(code, ip)]);
+      else Append(stack, BRT_GetGlobal(globals, consts[BRT_ReadU16(code, ip)]));
       sp = sp + 1;
       ip = ip + 2;
     } else if (op == BRT_GET_LOCAL) {
@@ -162,17 +184,22 @@ U0 BRT_RunFrame(U0 fn, U0 globals, U0[] stack, I64 sp)
       I64 argc = code[ip];
       ip = ip + 1;
       U0 callee = stack[sp - argc - 1];
-      if (IndexOf(ValueDesc(callee), "fn:") != 0) {
-        PrintErr("brt: can only call functions\n");
-        return NULL;
-      }
       U0[] args = [];
       I64 i = 0;
       while (i < argc) {
         Append(args, stack[sp - argc + i]);
         i = i + 1;
       }
-      U0 result = BRT_RunFunctionWithGlobals(callee, args, globals);
+      U0 result = NULL;
+      U8 calleeDesc = ValueDesc(callee);
+      if (IndexOf(calleeDesc, "fn:") == 0) {
+        result = BRT_RunFunctionWithGlobals(callee, args, globals);
+      } else if (calleeDesc == "str") {
+        result = BRT_CallNative(callee, args);
+      } else {
+        PrintErr("brt: can only call functions\n");
+        return NULL;
+      }
       sp = sp - argc - 1;
       if (sp < Len(stack)) stack[sp] = result;
       else Append(stack, result);
