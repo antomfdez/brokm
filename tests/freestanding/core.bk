@@ -1,0 +1,1 @@
+Print("%d %d %s\n", Abs(-3), Len([1, 2, 3]), ToStr(42));

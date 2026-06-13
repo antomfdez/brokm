@@ -162,7 +162,8 @@ int aot_build(const char *srcPath, const char *argv0, const AotOptions *opt) {
     free_stmtlist(&program);
     goto done;
   }
-  if (!typecheck(&program)) {
+  if (!(opt->freestanding ? typecheck_freestanding(&program)
+                          : typecheck(&program))) {
     free_stmtlist(&program);
     goto done;
   }
@@ -196,7 +197,9 @@ int aot_build(const char *srcPath, const char *argv0, const AotOptions *opt) {
     code = 70;
     goto done;
   }
-  bool emitted = cemit_program(script, cFile);
+  CEmitOptions emitOpt = {0};
+  emitOpt.freestanding = opt->freestanding;
+  bool emitted = cemit_program(script, cFile, &emitOpt);
   fclose(cFile);
   if (!emitted) {
     remove(cPath);
@@ -220,6 +223,9 @@ int aot_build(const char *srcPath, const char *argv0, const AotOptions *opt) {
   bool fit = buf_appendf(cmd, sizeof(cmd), &len,
                          "%s -std=c99 %s -DBK_NO_JIT -DBK_NO_FRONTEND ", cc,
                          opt->optFlag);
+  if (opt->freestanding) {
+    fit = fit && buf_appendf(cmd, sizeof(cmd), &len, "-DBK_FREESTANDING ");
+  }
   fit = fit && buf_appendf(cmd, sizeof(cmd), &len, "-I");
   fit = fit && buf_append_quoted(cmd, sizeof(cmd), &len, home);
   fit = fit && buf_appendf(cmd, sizeof(cmd), &len, "/include -I");
@@ -234,7 +240,8 @@ int aot_build(const char *srcPath, const char *argv0, const AotOptions *opt) {
   if (opt->cflags != NULL) {
     fit = fit && buf_appendf(cmd, sizeof(cmd), &len, " %s", opt->cflags);
   }
-  fit = fit && buf_appendf(cmd, sizeof(cmd), &len, " -lm -o ");
+  if (!opt->freestanding) fit = fit && buf_appendf(cmd, sizeof(cmd), &len, " -lm");
+  fit = fit && buf_appendf(cmd, sizeof(cmd), &len, " -o ");
   fit = fit && buf_append_quoted(cmd, sizeof(cmd), &len, outPath);
   if (!fit) {
     fprintf(stderr, "brokm build: command line too long\n");

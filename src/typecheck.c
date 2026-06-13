@@ -14,6 +14,7 @@
 #include <stdlib.h>
 
 #include "memory.h"
+#include "natives.h"
 #include "object.h"
 #include "typecheck.h"
 #include "vm.h" /* per-VM host-native registry */
@@ -51,6 +52,7 @@ typedef struct {
   int classCount, classCap;
 
   Type currentReturn; /* return type of the function being checked */
+  bool freestanding;
   bool hadError;
 } Checker;
 
@@ -198,33 +200,20 @@ void typecheck_register_native(const char *name) {
   vm->hostNatives[vm->hostNativeCount++] = copy;
 }
 
-static void register_natives(void) {
+static void register_standard_native(const char *raw) {
+  ObjString *name = string_copy(raw, (int)strlen(raw));
+  register_func(name, ty(TY_UNKNOWN), NULL, 0, true);
+}
+
+static void register_natives(bool freestanding) {
   /* Names from natives_register() in natives.c. All variadic, TY_UNKNOWN
    * result, so calls to them are never flagged. */
-  static const char *NAMES[] = {
-      "Print",  "PrintErr",  "GcCollect", "GcMinor", "GcDisable", "GcEnable",
-      "Len",    "Append",    "MAlloc",    "Free",    "PeekU8",
-      "PokeU8", "PeekI64",   "PokeI64",   "PeekF64", "PokeF64",
-      "PeekPtr", "PokePtr",
-      /* v0.6 standard library */
-      "CharAt", "Chr",       "Substr",    "IndexOf", "ToInt",     "ToStr",
-      "ReadFile", "WriteFile",
-      "Abs",    "Min",       "Max",       "Sqrt",    "Pow",       "Floor", "Ceil",
-      /* v0.7 maps */
-      "MapNew", "MapSet",    "MapGet",    "MapHas",  "MapDelete", "MapLen", "MapKeys",
-      /* self-hosting: emit + run the C VM's real bytecode */
-      "Opcode", "Assemble", "MakeClass", "AddMethod",
-      /* bytecode introspection (bootstrap fixpoint check) */
-      "ChunkCode", "ChunkConsts", "ValueDesc",
-      /* v0.13 scripting / OS */
-      "Args",   "Env",       "Exit",      "Shell",   "ShellStr",
-      "Input",  "Time",      "TimeMs",    "Sleep",   "AppendFile", "FileExists",
-  };
-  size_t n = sizeof(NAMES) / sizeof(NAMES[0]);
-  for (size_t i = 0; i < n; i++) {
-    ObjString *name = string_copy(NAMES[i], (int)strlen(NAMES[i]));
-    register_func(name, ty(TY_UNKNOWN), NULL, 0, true);
+#define REGISTER_NATIVE_NAME(name, fn) register_standard_native(name);
+  BK_NATIVE_CORE_LIST(REGISTER_NATIVE_NAME)
+  if (!freestanding) {
+    BK_NATIVE_HOSTED_ONLY_LIST(REGISTER_NATIVE_NAME)
   }
+#undef REGISTER_NATIVE_NAME
   /* This VM's host natives from the embedding API, same gradual treatment. */
   for (int i = 0; i < vm->hostNativeCount; i++) {
     ObjString *name =
@@ -372,6 +361,13 @@ static Type check_unary(Expr *expr) {
   }
 }
 
+static bool is_hosted_only_native(ObjString *name) {
+#define MATCH_HOSTED_NATIVE(raw, fn) if (strcmp(name->chars, raw) == 0) return true;
+  BK_NATIVE_HOSTED_ONLY_LIST(MATCH_HOSTED_NATIVE)
+#undef MATCH_HOSTED_NATIVE
+  return false;
+}
+
 static Type check_call(Expr *expr) {
   Expr *callee = expr->as.call.callee;
   ExprList *args = &expr->as.call.args;
@@ -430,6 +426,13 @@ static Type check_call(Expr *expr) {
         }
       }
       return fn->ret;
+    }
+
+    if (tc.freestanding && is_hosted_only_native(name)) {
+      tc_error(expr->line,
+               "native '%s' is unavailable in --freestanding builds",
+               name->chars);
+      return ty(TY_UNKNOWN);
     }
   }
 
@@ -700,7 +703,7 @@ static void check_stmt(Stmt *stmt) {
 
 /* ---- entry point ------------------------------------------------------ */
 
-bool typecheck(StmtList *program) {
+static bool typecheck_with_profile(StmtList *program, bool freestanding) {
   tc.vars = NULL;
   tc.varCount = tc.varCap = 0;
   tc.depth = 0;
@@ -709,9 +712,10 @@ bool typecheck(StmtList *program) {
   tc.classes = NULL;
   tc.classCount = tc.classCap = 0;
   tc.currentReturn = ty(TY_UNKNOWN);
+  tc.freestanding = freestanding;
   tc.hadError = false;
 
-  register_natives();
+  register_natives(freestanding);
 
   /* Pre-pass: register every top-level function and class so calls can resolve
    * forward references and constructors. */
@@ -734,4 +738,10 @@ bool typecheck(StmtList *program) {
   FREE_ARRAY(TcFunc, tc.funcs, tc.funcCap);
   FREE_ARRAY(TcClass, tc.classes, tc.classCap);
   return ok;
+}
+
+bool typecheck(StmtList *program) { return typecheck_with_profile(program, false); }
+
+bool typecheck_freestanding(StmtList *program) {
+  return typecheck_with_profile(program, true);
 }

@@ -725,11 +725,12 @@ vision: a `--freestanding` profile good enough to boot a kernel written in brokm
   Value/object printing and the `Print`/`OP_PRINT` formatter were unified onto it; the
   only libc left in that path is the `snprintf` number conversions, localized to
   `output.c` for the freestanding phase to replace. Byte-identical across all five paths.
-- **Still open:** the `BK_FREESTANDING` flag itself — natives subset table (drop
-  Shell/Input/file IO/Time), `gc.c` compiled to a bump-allocator stub with collection off,
-  print via a pluggable `bk_putchar` hook instead of stdio, `-nostdlib` entry point
-  (`_start`-style, no `main`), and a `--freestanding` spelling on `brokm build` that implies
-  the define + drops `-lm`. Open design question: string/array/map objects allocate — decide
+  `brokm build --freestanding` now defines `BK_FREESTANDING`, drops `-lm`, compiles out
+  hosted-only natives (file IO, libm math, process/env/stdin/time), and rejects those calls
+  at AOT typecheck time.
+- **Still open:** `gc.c` compiled to a bump-allocator stub with collection off,
+  replacement for the remaining `snprintf` number conversions, and a `-nostdlib` entry point
+  (`_start`-style, no `main`). Open design question: string/array/map objects allocate — decide
   whether freestanding keeps the object heap (bump, never freed) or restricts programs to
   scalars + `MAlloc`/`Peek`/`Poke` in a first cut.
 

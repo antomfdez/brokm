@@ -9,6 +9,7 @@ typedef struct {
   const char *outPath; /* -o; NULL = source basename minus .bk */
   bool emitCOnly;      /* --emit=c: write the C source only, skip cc */
   bool keepC;          /* --keep-c: keep the intermediate .c beside the exe */
+  bool freestanding;   /* --freestanding: build against the reduced runtime */
   const char *cc;      /* --cc; NULL = $CC env else "cc" */
   const char *optFlag; /* optimization flag passed to cc, default "-O2" */
   const char *cflags;  /* --cflags; extra cc/linker flags appended verbatim

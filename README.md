@@ -45,18 +45,20 @@ make              # builds ./brokm  (-std=c99 -Wall -Wextra, 0 warnings)
 ./brokm run file.bk            # same, explicit subcommand
 ./brokm build file.bk -o app   # AOT-compile to a standalone native executable
 ./brokm build file.bk --emit=c # emit the generated C instead of an executable
+./brokm build file.bk --freestanding # AOT-build with the reduced runtime profile
 ./brokm           # start the REPL
 make test         # run the golden test suite
 make test-aot     # run the suite AOT-compiled to native executables
+make test-freestanding # focused checks for the freestanding AOT profile
 make test-gc      # run the suite with the GC firing on every allocation
 make bench        # benchmark interpreter vs JIT vs AOT (Fib)
 make debug        # ASan/UBSan + bytecode/exec tracing build
 ```
 
 `brokm build` translates the compiled bytecode to C and drives the system C
-compiler (options: `-o <out>`, `--emit=c`, `--keep-c`, `--cc <compiler>`,
-`--cflags <flags>` for extra compiler/linker flags such as `--target=...` or
-`-static`, `-O0`..`-O3`, `--verbose`, `--quiet`). The build needs the brokm source tree to
+compiler (options: `-o <out>`, `--emit=c`, `--keep-c`, `--freestanding`,
+`--cc <compiler>`, `--cflags <flags>` for extra compiler/linker flags such as
+`--target=...` or `-static`, `-O0`..`-O3`, `--verbose`, `--quiet`). The build needs the brokm source tree to
 link the runtime: it looks next to the `brokm` executable, or wherever
 `BROKM_HOME` points.
 

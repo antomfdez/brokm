@@ -13,8 +13,12 @@
 
 #include "object.h"
 
+typedef struct {
+  bool freestanding; /* emit a translation unit for BK_FREESTANDING */
+} CEmitOptions;
+
 /* Returns false (after reporting to stderr) if the program contains a
  * construct the emitter cannot translate. */
-bool cemit_program(ObjFunction *script, FILE *out);
+bool cemit_program(ObjFunction *script, FILE *out, const CEmitOptions *opt);
 
 #endif /* BROKM_CEMIT_H */

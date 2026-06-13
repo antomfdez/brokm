@@ -13,6 +13,10 @@
  * any type error was found. */
 bool typecheck(StmtList *program);
 
+/* Variant used by `brokm build --freestanding`: reject calls to natives that
+ * are not registered in a BK_FREESTANDING runtime. */
+bool typecheck_freestanding(StmtList *program);
+
 /* Register a host-provided native name (from the embedding API) so scripts may
  * call it without an "unknown identifier" error. Persists across typecheck()
  * runs; treated as a variadic, TY_UNKNOWN builtin like the standard natives. */

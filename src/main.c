@@ -21,7 +21,7 @@ static void usage(FILE *out) {
       "  brokm <path.bk> [args...]  run a file (args readable via Args())\n"
       "  brokm run <path.bk> [args...]  run a file\n"
       "  brokm build <path.bk> [-o <out>] [--emit=c] [--keep-c]\n"
-      "                        [--cc <compiler>] [--cflags <flags>]\n"
+      "                        [--freestanding] [--cc <compiler>] [--cflags <flags>]\n"
       "                        [-O0|-O1|-O2|-O3] [--verbose] [--quiet]\n"
       "  brokm --version | -v       print the version\n",
       out);
@@ -80,6 +80,8 @@ static int cmd_build(int argc, char **argv) {
       opt.emitCOnly = true;
     } else if (strcmp(arg, "--keep-c") == 0) {
       opt.keepC = true;
+    } else if (strcmp(arg, "--freestanding") == 0) {
+      opt.freestanding = true;
     } else if (strcmp(arg, "-O0") == 0 || strcmp(arg, "-O1") == 0 ||
                strcmp(arg, "-O2") == 0 || strcmp(arg, "-O3") == 0) {
       opt.optFlag = arg;

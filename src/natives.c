@@ -4,13 +4,15 @@
 #define _DEFAULT_SOURCE /* popen, getline, gettimeofday, nanosleep under -std=c99 */
 #endif
 
-#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifndef BK_FREESTANDING
+#include <math.h>
 #include <sys/time.h>
 #include <sys/wait.h>
 #include <time.h>
+#endif
 
 #include "gc.h"
 #include "natives.h"
@@ -409,6 +411,7 @@ static Value native_to_str(int argc, Value *args) {
   return OBJ_VAL(string_copy(buf, n));
 }
 
+#ifndef BK_FREESTANDING
 /* ---- standard library: file I/O ------------------------------------------ */
 
 /* ReadFile(path) - whole file as a string, or nil if it cannot be opened. */
@@ -440,13 +443,17 @@ static Value native_write_file(int argc, Value *args) {
   fclose(f);
   return BOOL_VAL(w == (size_t)c->length);
 }
+#endif /* !BK_FREESTANDING */
 
 /* ---- standard library: math ----------------------------------------------
  * Abs/Min/Max preserve int-vs-float; Sqrt/Pow/Floor/Ceil return F64. */
 
 static Value native_abs(int argc, Value *args) {
   if (argc < 1) return INT_VAL(0);
-  if (IS_FLOAT(args[0])) return FLOAT_VAL(fabs(AS_FLOAT(args[0])));
+  if (IS_FLOAT(args[0])) {
+    F64 f = AS_FLOAT(args[0]);
+    return FLOAT_VAL(f < 0.0 ? -f : f);
+  }
   return INT_VAL((I64)llabs((long long)to_i64(args[0])));
 }
 
@@ -464,10 +471,12 @@ static Value native_max(int argc, Value *args) {
   return to_f64(a) >= to_f64(b) ? a : b;
 }
 
+#ifndef BK_FREESTANDING
 static Value native_sqrt(int argc, Value *args)  { return FLOAT_VAL(sqrt(argc >= 1 ? to_f64(args[0]) : 0.0)); }
 static Value native_pow(int argc, Value *args)   { return FLOAT_VAL(pow(argc >= 1 ? to_f64(args[0]) : 0.0, argc >= 2 ? to_f64(args[1]) : 0.0)); }
 static Value native_floor(int argc, Value *args) { return FLOAT_VAL(floor(argc >= 1 ? to_f64(args[0]) : 0.0)); }
 static Value native_ceil(int argc, Value *args)  { return FLOAT_VAL(ceil(argc >= 1 ? to_f64(args[0]) : 0.0)); }
+#endif /* !BK_FREESTANDING */
 
 /* ---- self-hosting: emit and run the C VM's real bytecode ------------------
  * These let a brokm program act as a back-end for this very VM. Opcode(name)
@@ -709,6 +718,7 @@ void natives_set_args(int argc, char **argv) {
   g_argValues = argv;
 }
 
+#ifndef BK_FREESTANDING
 /* Args() - a new array of the script's command-line arguments (the ones after
  * the script path; for an AOT-compiled program, the ones after the program). */
 static Value native_args(int argc, Value *args) {
@@ -846,66 +856,13 @@ static Value native_file_exists(int argc, Value *args) {
   fclose(f);
   return BOOL_VAL(true);
 }
+#endif /* !BK_FREESTANDING */
 
 void natives_register(void) {
-  vm_define_native("Print", native_print);
-  vm_define_native("PrintErr", native_print_err);
-  vm_define_native("GcCollect", native_gc_collect);
-  vm_define_native("GcMinor", native_gc_minor);
-  vm_define_native("GcDisable", native_gc_disable);
-  vm_define_native("GcEnable", native_gc_enable);
-  vm_define_native("Len", native_len);
-  vm_define_native("Append", native_append);
-  vm_define_native("MapNew", native_map_new);
-  vm_define_native("MapSet", native_map_set);
-  vm_define_native("MapGet", native_map_get);
-  vm_define_native("MapHas", native_map_has);
-  vm_define_native("MapDelete", native_map_delete);
-  vm_define_native("MapLen", native_map_len);
-  vm_define_native("MapKeys", native_map_keys);
-  vm_define_native("MAlloc", native_malloc);
-  vm_define_native("Free", native_free);
-  vm_define_native("PeekU8", native_peek_u8);
-  vm_define_native("PokeU8", native_poke_u8);
-  vm_define_native("PeekI64", native_peek_i64);
-  vm_define_native("PokeI64", native_poke_i64);
-  vm_define_native("PeekF64", native_peek_f64);
-  vm_define_native("PokeF64", native_poke_f64);
-  vm_define_native("PeekPtr", native_peek_ptr);
-  vm_define_native("PokePtr", native_poke_ptr);
-  /* v0.6 standard library */
-  vm_define_native("CharAt", native_char_at);
-  vm_define_native("Chr", native_chr);
-  vm_define_native("Substr", native_substr);
-  vm_define_native("IndexOf", native_index_of);
-  vm_define_native("ToInt", native_to_int);
-  vm_define_native("ToStr", native_to_str);
-  vm_define_native("ReadFile", native_read_file);
-  vm_define_native("WriteFile", native_write_file);
-  vm_define_native("Abs", native_abs);
-  vm_define_native("Min", native_min);
-  vm_define_native("Max", native_max);
-  vm_define_native("Sqrt", native_sqrt);
-  vm_define_native("Pow", native_pow);
-  vm_define_native("Floor", native_floor);
-  vm_define_native("Ceil", native_ceil);
-  /* v0.13 scripting / OS */
-  vm_define_native("Args", native_args);
-  vm_define_native("Env", native_env);
-  vm_define_native("Exit", native_exit);
-  vm_define_native("Shell", native_shell);
-  vm_define_native("ShellStr", native_shell_str);
-  vm_define_native("Input", native_input);
-  vm_define_native("Time", native_time);
-  vm_define_native("TimeMs", native_time_ms);
-  vm_define_native("Sleep", native_sleep);
-  vm_define_native("AppendFile", native_append_file);
-  vm_define_native("FileExists", native_file_exists);
-  vm_define_native("Opcode", native_opcode);
-  vm_define_native("Assemble", native_assemble);
-  vm_define_native("MakeClass", native_make_class);
-  vm_define_native("AddMethod", native_add_method);
-  vm_define_native("ChunkCode", native_chunk_code);
-  vm_define_native("ChunkConsts", native_chunk_consts);
-  vm_define_native("ValueDesc", native_value_desc);
+#define REGISTER_NATIVE(name, fn) vm_define_native(name, fn);
+  BK_NATIVE_CORE_LIST(REGISTER_NATIVE)
+#ifndef BK_FREESTANDING
+  BK_NATIVE_HOSTED_ONLY_LIST(REGISTER_NATIVE)
+#endif
+#undef REGISTER_NATIVE
 }
