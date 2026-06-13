@@ -46,10 +46,6 @@
   X("Assemble", native_assemble)                                            \
   X("MakeClass", native_make_class)                                         \
   X("AddMethod", native_add_method)                                         \
-  X("BrtConstruct", native_brt_construct)                                   \
-  X("BrtGetField", native_brt_get_field)                                    \
-  X("BrtSetField", native_brt_set_field)                                    \
-  X("BrtMethod", native_brt_method)                                         \
   X("ChunkCode", native_chunk_code)                                         \
   X("ChunkConsts", native_chunk_consts)                                     \
   X("ValueDesc", native_value_desc)
