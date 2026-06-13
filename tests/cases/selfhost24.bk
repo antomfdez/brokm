@@ -1,0 +1,26 @@
+// selfhost24: brt.bk handles OP_ARRAY / OP_INDEX_GET / OP_INDEX_SET for real
+// bytecode emitted by realcc.
+#include "../../examples/realcc.bk"
+#include "../../examples/brt.bk"
+
+U0 script = Compile("
+  I64 ArrayScore() {
+    U0[] a = [5, 1, 4, 3, 2];
+    a[1] = 7;
+    I64 i = 0;
+    I64 sum = 0;
+    while (i < 5) {
+      sum = sum + a[i];
+      i = i + 1;
+    }
+    if (a[0] == 5 && a[1] == 7) return sum;
+    return 0;
+  }
+");
+
+U0 score = BRT_FindFirstFunction(script, 0);
+
+"c-vm:\n";
+"score = %d\n", score();
+"brt:\n";
+"score = %d\n", BRT_RunFunction(score, []);
