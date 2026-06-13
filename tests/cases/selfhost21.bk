@@ -1,0 +1,20 @@
+// selfhost21: the first runtime-in-brokm seed. Compile a small real brokm chunk
+// with realcc, run it once on the production C VM and once through brt.bk's
+// brokm-written bytecode interpreter, and require byte-identical behavior for
+// the initial opcode subset.
+#include "../../examples/realcc.bk"
+#include "../../examples/brt.bk"
+
+U0 fn = Compile("
+  I64 x = 6 * 7;
+  I64 y = x - 10;
+  \"x = %d\n\", x;
+  \"y = %d\n\", y;
+  \"neg = %d\n\", -y;
+  \"mod = %d\n\", y % 5;
+");
+
+"c-vm:\n";
+fn();
+"brt:\n";
+BRT_Run(fn);

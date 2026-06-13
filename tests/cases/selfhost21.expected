@@ -1,0 +1,10 @@
+c-vm:
+x = 42
+y = 32
+neg = -32
+mod = 2
+brt:
+x = 42
+y = 32
+neg = -32
+mod = 2
