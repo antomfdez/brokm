@@ -1,0 +1,80 @@
+c-vm:
+== Fib ==
+Fib(0) = 0
+Fib(1) = 1
+Fib(2) = 1
+Fib(3) = 2
+Fib(4) = 3
+Fib(5) = 5
+Fib(6) = 8
+Fib(7) = 13
+== Gcd ==
+Gcd(48, 36) = 12
+Gcd(1071, 462) = 21
+== Counter ==
+counter = 105
+== Points ==
+dist = 7
+== List ==
+sum = 60
+== Bits ==
+12 & 10 = 8
+1 << 8 = 256
+flags = 21
+popcount(255) = 8
+5 even? 0  8 even? 1
+guard = 1
+== Classify ==
+zero
+one
+two
+many
+== Grades ==
+95 -> A
+82 -> B
+71 -> C
+40 -> F
+== Clamp ==
+clamp(-5,0,10) = 0
+clamp(7,0,10)  = 7
+clamp(99,0,10) = 10
+brt:
+== Fib ==
+Fib(0) = 0
+Fib(1) = 1
+Fib(2) = 1
+Fib(3) = 2
+Fib(4) = 3
+Fib(5) = 5
+Fib(6) = 8
+Fib(7) = 13
+== Gcd ==
+Gcd(48, 36) = 12
+Gcd(1071, 462) = 21
+== Counter ==
+counter = 105
+== Points ==
+dist = 7
+== List ==
+sum = 60
+== Bits ==
+12 & 10 = 8
+1 << 8 = 256
+flags = 21
+popcount(255) = 8
+5 even? 0  8 even? 1
+guard = 1
+== Classify ==
+zero
+one
+two
+many
+== Grades ==
+95 -> A
+82 -> B
+71 -> C
+40 -> F
+== Clamp ==
+clamp(-5,0,10) = 0
+clamp(7,0,10)  = 7
+clamp(99,0,10) = 10

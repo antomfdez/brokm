@@ -1,0 +1,23 @@
+// selfhost26: brt.bk covers realcc's bitwise/shift/logical opcode surface.
+#include "../../examples/realcc.bk"
+#include "../../examples/brt.bk"
+
+U0 script = Compile("
+  \"and  = %d\n\", 12 & 10;
+  \"or   = %d\n\", 12 | 3;
+  \"xor  = %d\n\", 6 ^ 3;
+  \"shl  = %d\n\", 1 << 4;
+  \"shr  = %d\n\", 256 >> 2;
+  \"bnot = %d\n\", ~0;
+  \"not0 = %d\n\", !0;
+  \"not5 = %d\n\", !5;
+  \"prec = %d\n\", 2 + 3 * 4 == 14;
+  \"land = %d\n\", 1 < 2 && 3 < 4;
+  \"lor  = %d\n\", 0 || 7;
+  \"mix  = %d\n\", 1 & 2 | 4;
+");
+
+"c-vm:\n";
+script();
+"brt:\n";
+BRT_Run(script);

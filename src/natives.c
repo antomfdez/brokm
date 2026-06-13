@@ -609,6 +609,53 @@ static Value native_add_method(int argc, Value *args) {
   return args[0];
 }
 
+/* BrtConstruct/BrtGetField/BrtSetField/BrtMethod are deliberately tiny object
+ * reflection hooks for examples/brt.bk, the brokm-written bytecode runtime.
+ * brokm code can hold class/instance values, but it cannot inspect their field
+ * tables directly; these expose exactly the operations OP_CALL-on-class,
+ * OP_GET_FIELD, OP_SET_FIELD, and OP_INVOKE need. */
+static Value native_brt_construct(int argc, Value *args) {
+  if (argc < 2 || !IS_CLASS(args[0]) || !IS_ARRAY(args[1])) return NIL_VAL;
+  ObjClass *klass = AS_CLASS(args[0]);
+  ValueArray *argv = &AS_ARRAY(args[1])->elements;
+  if (argv->count > klass->fieldCount) return NIL_VAL;
+  ObjInstance *inst = instance_new(klass);
+  vm_push(OBJ_VAL(inst)); /* root across field-table growth */
+  for (int i = 0; i < klass->fieldCount; i++) {
+    Value v = i < argv->count ? argv->values[i] : NIL_VAL;
+    table_set(&inst->fields, klass->fields[i], v);
+    gc_write_barrier((Obj *)inst, v);
+  }
+  vm_pop();
+  return OBJ_VAL(inst);
+}
+
+static Value native_brt_get_field(int argc, Value *args) {
+  if (argc < 2 || !IS_INSTANCE(args[0]) || !IS_STRING(args[1])) return NIL_VAL;
+  Value out;
+  if (table_get(&AS_INSTANCE(args[0])->fields, AS_STRING(args[1]), &out)) return out;
+  return NIL_VAL;
+}
+
+static Value native_brt_set_field(int argc, Value *args) {
+  if (argc < 3 || !IS_INSTANCE(args[0]) || !IS_STRING(args[1])) return NIL_VAL;
+  ObjInstance *inst = AS_INSTANCE(args[0]);
+  Value existing;
+  if (!table_get(&inst->fields, AS_STRING(args[1]), &existing)) return NIL_VAL;
+  table_set(&inst->fields, AS_STRING(args[1]), args[2]);
+  gc_write_barrier((Obj *)inst, args[2]);
+  return args[2];
+}
+
+static Value native_brt_method(int argc, Value *args) {
+  if (argc < 2 || !IS_INSTANCE(args[0]) || !IS_STRING(args[1])) return NIL_VAL;
+  ObjInstance *inst = AS_INSTANCE(args[0]);
+  Value out;
+  if (table_get(&inst->fields, AS_STRING(args[1]), &out)) return out;
+  if (table_get(&inst->klass->methods, AS_STRING(args[1]), &out)) return out;
+  return NIL_VAL;
+}
+
 /* ---- bytecode introspection ------------------------------------------------
  * Read-only views of a compiled function, so brokm code can compare two
  * compiled artifacts structurally — the three-stage bootstrap fixpoint check

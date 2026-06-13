@@ -1,0 +1,34 @@
+// selfhost30: brt.bk runs realcc-emitted methods through OP_INVOKE.
+#include "../../examples/realcc.bk"
+#include "../../examples/brt.bk"
+
+U0 script = Compile("
+  class Counter {
+    I64 n;
+    func Inc() { this.n = this.n + 1; }
+    func IncTwice() { this.Inc(); this.Inc(); }
+    func AddN(k) { this.n = this.n + k; return this.n; }
+    I64 Get() { return this.n; }
+  }
+  class Point {
+    I64 x; I64 y;
+    func DistL1(o) { return Abs(this.x - o.x) + Abs(this.y - o.y); }
+  }
+  func Bump(c) { c.Inc(); }
+
+  c = Counter(0);
+  c.Inc();
+  c.IncTwice();
+  Bump(c);
+  print c.Get();
+  print c.AddN(10);
+
+  p = Point(1, 2);
+  q = Point(4, 6);
+  print p.DistL1(q);
+");
+
+"c-vm:\n";
+script();
+"brt:\n";
+BRT_Run(script);

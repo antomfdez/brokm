@@ -1,0 +1,13 @@
+// selfhost31: capstone for the brokm-written runtime seed. realcc compiles the
+// ordinary selfcompile sample program, then brt runs the resulting bytecode and
+// must match the C VM.
+#include "../../examples/realcc.bk"
+#include "../../examples/brt.bk"
+
+U8 src = ReadFile("examples/sample.bk");
+U0 prog = Compile(src);
+
+"c-vm:\n";
+prog();
+"brt:\n";
+BRT_Run(prog);
