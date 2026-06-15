@@ -42,7 +42,7 @@ BrokmResult brokm_eval(BrokmVM *vm, const char *source);
 /* Read, compile, and execute a .bk file on this VM. */
 BrokmResult brokm_run_file(BrokmVM *vm, const char *path);
 
-/* Library version string, e.g. "0.11.0". */
+/* Library version string, e.g. "1.1.0". */
 const char *brokm_version(void);
 
 /* ---- value exchange (v0.9) ----------------------------------------------

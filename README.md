@@ -5,13 +5,14 @@ language with a clean [HolyC](https://en.wikipedia.org/wiki/TempleOS#HolyC)-flav
 It is built primarily for its author's own use, with four design goals: **small, fast, robust,
 and easy to embed**.
 
-This is **v1.0** — the first stable release: a working bytecode VM with a precise, **generational** mark-sweep garbage
+This is **v1.1.0**, building on the v1.0 first stable release: a working bytecode VM with a precise, **generational** mark-sweep garbage
 collector, aggregate types (arrays + classes/structs **with methods**), an opt-in
 **manual-memory** mode for low-level work, a **static type checker** that validates the HolyC type
 annotations before any code runs, **typed bytecode** that specializes the int hot path, a
 **baseline JIT** that compiles hot functions to native code (**arm64 + x86-64**, with a full
 interpreter fallback), an **AOT compiler** (`brokm build`) that turns a program into a
-standalone native executable, a **standard library** — native builtins (file I/O, strings,
+standalone native executable, an in-progress **`--freestanding` AOT profile** for reduced-runtime
+targets, a **standard library** — native builtins (file I/O, strings,
 math, maps, **scripting**: `Args`/`Env`/`Shell`/`Input`/`Time`/…) plus
 [**`lib/std/` modules written in brokm**](lib/std/) (`#include "std/std.bk"`), a **C embedding
 API** with **multi-instance VMs** (create any number of independent runtimes, register natives,
@@ -60,7 +61,9 @@ compiler (options: `-o <out>`, `--emit=c`, `--keep-c`, `--freestanding`,
 `--cc <compiler>`, `--cflags <flags>` for extra compiler/linker flags such as
 `--target=...` or `-static`, `-O0`..`-O3`, `--verbose`, `--quiet`). The build needs the brokm source tree to
 link the runtime: it looks next to the `brokm` executable, or wherever
-`BROKM_HOME` points.
+`BROKM_HOME` points. `--freestanding` defines `BK_FREESTANDING`, drops `-lm`,
+links the reduced native set, and rejects hosted-only calls such as file I/O,
+process/env/stdin/time, and libm math at build-time typecheck.
 
 ## Install & update
 
@@ -233,9 +236,12 @@ native executables. The **scripting stdlib** (v0.13) added OS/process natives an
 `lib/std/` modules written in brokm itself, installed and updated as one unit by `install.sh`.
 **Optimized AOT** (v0.14) made the emitted C cache the VM stack top in a C local and call
 AOT-compiled callees directly — AOT binaries now beat the JIT on `make bench` — and AOT
-executables link only the runtime core (no parser/typechecker/compiler inside). Next up: a
-`--freestanding` runtime profile, the path toward booting a kernel written in brokm — with a
-runtime in brokm as the long-term star. See the roadmap.
+executables link only the runtime core (no parser/typechecker/compiler inside). The
+`--freestanding` AOT profile is now a focused reduced-runtime build: no hosted-only natives,
+no `-lm`, centralized output through `bk_putchar`, and libc-free formatting for the common
+integer/base/string/char/pointer path plus simple float display. The remaining kernel-path work is a collection-free/bump-allocated
+object heap, fuller libc-free formatting/diagnostics, and a real `-nostdlib` entry point —
+with a runtime in brokm as the long-term star. See the roadmap.
 
 ## License
 

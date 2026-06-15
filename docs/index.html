@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>brokm — a small, fast, embeddable language</title>
-<meta name="description" content="brokm (broken minded) is a small, fast, embeddable general-purpose language with a HolyC-flavored syntax: a bytecode VM, generational GC, static type checker, and a baseline arm64 JIT.">
+<meta name="description" content="brokm (broken minded) is a small, fast, embeddable general-purpose language with a HolyC-flavored syntax: bytecode VM, generational GC, static type checker, arm64/x86-64 JIT, AOT compiler, and freestanding profile.">
 <style>
   :root {
     --bg: #0d1117; --panel: #161b22; --border: #30363d;
@@ -81,6 +81,7 @@
       <span class="badge">static type checker</span>
       <span class="badge">arm64 + x86-64 JIT</span>
       <span class="badge">AOT → native binary</span>
+      <span class="badge">freestanding AOT profile</span>
       <span class="badge">stdlib</span>
     </div>
     <div class="cta">
@@ -117,12 +118,13 @@
     <div class="grid">
       <div class="card"><h3>Bytecode VM</h3><p>A compact stack VM: lexer → parser/AST → bytecode compiler → interpreter.</p></div>
       <div class="card"><h3>Generational GC</h3><p>Precise, non-moving mark-sweep with minor/major collections and a load-bearing write barrier.</p></div>
-      <div class="card"><h3>Aggregates</h3><p>Dynamic arrays and reference-semantics classes/structs with typed fields.</p></div>
+      <div class="card"><h3>Aggregates</h3><p>Dynamic arrays and reference-semantics classes/structs with typed fields and methods.</p></div>
       <div class="card"><h3>Manual memory</h3><p>Opt-in <span class="mono">MAlloc</span>/<span class="mono">Free</span> with typed peek/poke for low-level work — GC-invisible.</p></div>
       <div class="card"><h3>Static type checker</h3><p>Validates HolyC type annotations before execution; gradual, so existing code is unaffected.</p></div>
       <div class="card"><h3>Baseline JIT</h3><p>Profile-gated arm64 + x86-64 code generation for hot functions, ~2× faster on recursion, with a full interpreter fallback.</p></div>
-      <div class="card"><h3>AOT compiler</h3><p><span class="mono">brokm build app.bk -o app</span> translates a program to C and produces a standalone native executable — no bytecode in the binary.</p></div>
-      <div class="card"><h3>Standard library</h3><p>File I/O, string ops, and math builtins — enough to write a brokm tokenizer in brokm.</p></div>
+      <div class="card"><h3>AOT compiler</h3><p><span class="mono">brokm build app.bk -o app</span> translates a program to C, links the runtime core, and produces a standalone native executable.</p></div>
+      <div class="card"><h3>Freestanding profile</h3><p><span class="mono">--freestanding</span> builds with the reduced native set, no <span class="mono">-lm</span>, and centralized output through <span class="mono">bk_putchar</span>.</p></div>
+      <div class="card"><h3>Standard library</h3><p>File I/O, strings, math, maps, scripting natives, and <span class="mono">lib/std</span> modules written in brokm.</p></div>
       <div class="card"><h3>Self-hosting</h3><p>A compiler written in brokm (<span class="mono">realcc.bk</span>) emits the VM's real bytecode and compiles its own source — byte-identical to the C compiler.</p></div>
     </div>
   </div>
@@ -148,12 +150,14 @@ export PATH=<span class="s">"$BROKM_HOME:$PATH"</span></pre>
       <li><code>cd brokm &amp;&amp; make</code> &nbsp;<span class="note">builds <span class="mono">./brokm</span> (0 warnings)</span></li>
       <li><code>./brokm file.bk</code> &nbsp;<span class="note">run a program — or <code>./brokm</code> for the REPL</span></li>
       <li><code>./brokm build file.bk -o app</code> &nbsp;<span class="note">AOT-compile to a standalone native executable</span></li>
+      <li><code>./brokm build file.bk --freestanding</code> &nbsp;<span class="note">AOT-build with the reduced runtime profile</span></li>
     </ol>
 <pre>make           <span class="c"># build ./brokm</span>
 make test      <span class="c"># run the golden test suite</span>
 make test-aot  <span class="c"># run it AOT-compiled to native executables</span>
+make test-freestanding <span class="c"># check the reduced AOT profile</span>
 make test-gc   <span class="c"># run it with the GC firing on every allocation</span>
-make bench     <span class="c"># benchmark the JIT against the interpreter</span></pre>
+make bench     <span class="c"># benchmark interpreter vs JIT vs AOT</span></pre>
   </div>
 </section>
 
@@ -178,7 +182,7 @@ make bench     <span class="c"># benchmark the JIT against the interpreter</span
       <div class="card"><h3><a href="https://github.com/antomfdez/brokm/blob/main/docs/SYNTAX.md">Syntax reference</a></h3><p>The full language surface: types, declarations, control flow, operators.</p></div>
       <div class="card"><h3><a href="https://github.com/antomfdez/brokm/blob/main/docs/STDLIB.md">Library reference</a></h3><p>Every built-in native and standard-library function, grouped by module.</p></div>
       <div class="card"><h3><a href="https://github.com/antomfdez/brokm/blob/main/docs/ARCHITECTURE.md">Architecture</a></h3><p>How the pipeline, VM, and collector fit together.</p></div>
-      <div class="card"><h3><a href="https://github.com/antomfdez/brokm/blob/main/docs/ROADMAP.md">Roadmap</a></h3><p>Milestones from the VM through the JIT — and what's next.</p></div>
+      <div class="card"><h3><a href="https://github.com/antomfdez/brokm/blob/main/docs/ROADMAP.md">Roadmap</a></h3><p>Milestones from the VM through AOT/freestanding — and what's next.</p></div>
       <div class="card"><h3><a href="https://github.com/antomfdez/brokm/blob/main/editors/README.md">Editor support</a></h3><p>Syntax highlighting for Neovim/Vim, Sublime Text, and Zed (Tree-sitter).</p></div>
     </div>
   </div>

@@ -702,6 +702,20 @@ golden-test outputs are byte-identical across all four execution paths
 only from a fully green matrix. Two v0.15 increments (front-end-free AOT link, `--cflags`)
 shipped early and are included.
 
+## v1.1.0 — maintenance + freestanding tightening ✅ (2026-06)
+
+Post-stable maintenance kept this repository focused on the C runtime and production
+execution paths:
+
+- The experimental brokm-written runtime rewrite moved out to `brokc`, leaving `brokm`
+  centered on the bytecode VM, JIT/AOT, embedding API, stdlib, and self-hosting compiler.
+- The freestanding formatter no longer depends on libc for the common output path:
+  integer/base conversions (`%d %i %u %o %x %X`), chars, strings, `%p`, and ordinary
+  value printing run through `output.c` helpers; hosted builds keep libc-backed
+  width/precision/float formatting for byte-identical behavior.
+- The freestanding tests now pin decimal/base/string/char/simple-float formatting
+  in addition to hosted-native rejection and emitted `BK_FREESTANDING` C.
+
 ## What's next
 
 With the bootstrap, multi-instance VMs, portability/CI, the AOT compile-to-C backend, the
@@ -720,11 +734,11 @@ vision: a `--freestanding` profile good enough to boot a kernel written in brokm
   interpreter loop itself stays because `Assemble`d functions run on it),
   `--cflags <flags>` passthrough (with `--cc`, covers `--target`/`-static`/`-L`/`-l`), and
   the **output seam** (`output.c`): every byte a program prints now flows through one
-  `bk_putchar` — the single function a freestanding host replaces with serial/VGA/syscall
-  output — with `bk_sink_*` formatting values to a `BkSink` (`bk_stdout`/`bk_stderr`).
+  `bk_putchar`, the seam a future `-nostdlib` host can replace with serial/VGA/syscall
+  output, with `bk_sink_*` formatting values to a `BkSink` (`bk_stdout`/`bk_stderr`).
   Value/object printing and the `Print`/`OP_PRINT` formatter were unified onto it, and
-  freestanding builds now use libc-free integer/string/char formatting plus a small
-  float display path for common `%g`-style values. Byte-identical across all five paths.
+  freestanding builds now use libc-free integer/base/string/char/pointer formatting plus
+  a small float display path for common `%g`-style values. Byte-identical across all five paths.
   `brokm build --freestanding` now defines `BK_FREESTANDING`, drops `-lm`, compiles out
   hosted-only natives (file IO, libm math, process/env/stdin/time), and rejects those calls
   at AOT typecheck time.

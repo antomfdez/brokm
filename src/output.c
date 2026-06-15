@@ -10,9 +10,8 @@
 
 #include "output.h"
 
-/* The swappable stdout byte sink: the one function a freestanding host
- * replaces. Routed through the stdout FILE buffer so ordering against
- * bk_stderr (and against runtime_error's stderr) is unchanged. */
+/* The stdout byte sink. Routed through the stdout FILE buffer so ordering
+ * against bk_stderr (and against runtime_error's stderr) is unchanged. */
 void bk_putchar(char c) { putchar((unsigned char)c); }
 
 static void emit_stdout(char c) { bk_putchar(c); }

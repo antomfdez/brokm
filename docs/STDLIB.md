@@ -22,6 +22,10 @@ Conventions across the whole library:
   untouched.
 - Out-of-range / failure generally yields `-1`, `NULL`, `FALSE`, or `""` rather
   than an error — these are scripting primitives.
+- `brokm build --freestanding` registers only the reduced core native set:
+  output/GC control, arrays/maps, manual memory, string primitives, `Abs`/`Min`/`Max`,
+  and the self-hosting bytecode helpers. Hosted-only file I/O, libm math,
+  process/env/stdin/time, and `Args()` are rejected at AOT typecheck time.
 
 ---
 
@@ -31,11 +35,14 @@ Conventions across the whole library:
 
 | Function | Returns | Description |
 |---|---|---|
-| `Print(fmt, ...)` | `nil` | printf-style formatting to **stdout**. If `fmt` is not a string, prints each argument space-separated. Integer conversions (`%d %i %u %o %x %X`) are 64-bit; `%c` takes a char code; `%s` takes a string. `%%` is a literal percent. |
+| `Print(fmt, ...)` | `nil` | printf-style formatting to **stdout**. If `fmt` is not a string, prints each argument space-separated. Integer conversions (`%d %i %u %o %x %X`) are 64-bit; `%e %E %f %F %g %G` print floats; `%c` takes a char code; `%s` takes a string; `%p` prints a raw/object address for debugging; `%%` is a literal percent. |
 | `PrintErr(fmt, ...)` | `nil` | Same formatter, targeting **stderr**. |
 
 `Print` is the function behind the `"...", args;` print-statement sugar. A
-missing argument for a conversion formats as `nil`/empty.
+missing argument for a conversion formats as `nil`/empty. Hosted builds pass
+width/precision/flags through libc. Freestanding builds keep the common no-libc
+subset (`%d/%i/%u/%o/%x/%X/%c/%s/%p` and simple float display) and currently
+ignore width/precision/flags.
 
 ## Garbage collection control
 
@@ -93,7 +100,7 @@ section.
 | `ToInt(x)` | `I64` | Parse a string (base 10), truncate a float, or pass an int through. |
 | `ToStr(x)` | `U8` | Render any value as a string (matches print formatting). |
 
-## File I/O (native primitives)
+## File I/O (native primitives; hosted-only)
 
 | Function | Returns | Description |
 |---|---|---|
@@ -107,8 +114,9 @@ Line-oriented wrappers (`ReadLines`, `WriteLines`, `AppendLine`) live in
 
 ## Math
 
-`Abs`/`Min`/`Max` preserve int-vs-float; `Sqrt`/`Pow`/`Floor`/`Ceil` always
-return `F64`.
+`Abs`/`Min`/`Max` preserve int-vs-float and are available in freestanding
+builds. `Sqrt`/`Pow`/`Floor`/`Ceil` use libm, always return `F64`, and are
+hosted-only.
 
 | Function | Returns | Description |
 |---|---|---|
@@ -120,7 +128,7 @@ return `F64`.
 | `Floor(x)` | `F64` | Round toward negative infinity. |
 | `Ceil(x)` | `F64` | Round toward positive infinity. |
 
-## Scripting / OS
+## Scripting / OS (hosted-only)
 
 Thin, `NULL`-on-failure wrappers over POSIX (macOS + Linux) that make brokm
 usable as a shell-script replacement.

@@ -9,7 +9,7 @@ source (.bk)
  tokens
    │  parser.c       recursive descent (statements) + Pratt (expressions)
    ▼
- AST  (ast.c/.h)     the seam for the type checker (v0.4) and the JIT (v0.5)
+ AST  (ast.c/.h)     the seam for static checks and bytecode/AOT codegen
    │  typecheck.c    static type-checking pass over the AST (gradual; v0.4)
    ▼
  AST  (typed)
@@ -22,8 +22,8 @@ source (.bk)
 ```
 
 Parsing and code generation are deliberately **separate passes** with the AST between them.
-A combined single-pass compiler would be smaller, but the AST is where static typing and a JIT
-attach cleanly later — so it earns its keep.
+A combined single-pass compiler would be smaller, but the AST is where static typing, class
+metadata, and bytecode emission meet cleanly — so it earns its keep.
 
 ## Modules
 
@@ -34,6 +34,7 @@ attach cleanly later — so it earns its keep.
 | `gc.c` | generational mark-sweep collector (minor/major, write barrier, remembered set) |
 | `value.c` | `Value` tagged union, equality, truthiness, printing, constant arrays |
 | `object.c` | heap objects (`ObjString/Function/Native/Array/Class/Instance/Map`); interning; teardown |
+| `output.c` / `output.h` | output seam (`bk_putchar`, `BkSink`) and shared value/number formatting |
 | `table.c` | open-addressing hash table (globals, interned strings, instance/map fields) |
 | `lexer.c` | hand-written scanner; resolves `#include` via a source-frame stack |
 | `ast.c` | AST nodes, list helpers, recursive free |
@@ -46,10 +47,10 @@ attach cleanly later — so it earns its keep.
 | `jit.c` | JIT driver: executable-page pool, profiling, dispatch + Value-layout asserts (v0.5) |
 | `jit_arm64.c` / `jit_x64.c` | per-arch encoders + bytecode walker (arm64 / x86-64) |
 | `debug.c` | bytecode disassembler |
-| `natives.c` | the native stdlib — printf formatter, I/O, strings, math, maps, manual memory, JIT bridge |
+| `natives.c` | the native stdlib — formatter, I/O, strings, math, maps, manual memory, self-hosting bridge; split into core vs hosted-only for `BK_FREESTANDING` |
 | `api.c` | public `brokm.h` implementation (value exchange, host natives, calls; v0.9) |
 | `cemit.c` | AOT back-end: bytecode chunks → C source (v0.12) |
-| `aot.c` | `brokm build` driver: front-end, emission, cc invocation, runtime discovery (v0.12) |
+| `aot.c` | `brokm build` driver: front-end, emission, cc invocation, runtime discovery, `--freestanding` profile |
 | `main.c` | CLI (`run` / `build` subcommands) / REPL |
 
 ## Value representation
@@ -72,12 +73,13 @@ struct Obj {
 };
 ```
 
-The header and the intrusive `next` list exist **now**, before any collector does, so that:
-- v0.1 frees everything at exit by walking the list (no leaks at exit), and
-- v0.2 mark-sweep and v0.3 generational GC drop in without changing object layouts.
+The header is the GC seam. New objects start in the young generation; minor collections skip
+old objects except those recorded in the remembered set by `gc_write_barrier(owner, value)`.
+Major collections trace the whole heap. The collector is non-moving, so `Obj *` addresses are
+stable for the VM, JIT, AOT shims, and embedding handles.
 
-All allocation funnels through `reallocate()` in `memory.c`; that is the one place a future
-collection is triggered.
+All allocation funnels through `reallocate()` in `memory.c`; growth there is what triggers
+minor or major collection unless `vm->gcEnabled` is disabled during compile/bootstrap windows.
 
 ## Bytecode VM
 
@@ -112,6 +114,13 @@ through the **same runtime helpers** (`jit_h_*`, defined in `vm.c`):
    under `-DBK_NO_JIT -DBK_NO_FRONTEND` (v0.15: no lexer/parser/typechecker/compiler in the
    link); the interpreter loop stays in the binary so dynamically assembled functions
    (`Assemble`) still run.
+
+`brokm build --freestanding` uses the same AOT path but defines `BK_FREESTANDING`, drops
+`-lm`, and registers only the reduced core native set. The profile centralizes all program
+output through `bk_putchar` and uses libc-free formatting for the common integer/base,
+string, char, and pointer path plus simple float display. It is not yet a full
+kernel/no-libc target: the current executable still has a hosted `main`, the default
+`output.c` sink, and the normal object allocator/GC runtime.
 
 ## Embedding model
 

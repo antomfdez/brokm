@@ -37,9 +37,9 @@ static F64 to_f64(Value v) {
 #ifndef BK_FREESTANDING
 /* Format one conversion into `s`. `flags` holds everything between '%' and the
  * conversion char (width, precision, flags). brokm integers are 64-bit, so
- * signed/unsigned integer conversions inject the `ll` length modifier. The
- * conversion still runs through libc snprintf (into a buffer that grows if a
- * width demands it), then the bytes are emitted to the sink — so output is
+ * signed/unsigned integer conversions inject the `ll` length modifier. Most
+ * hosted conversions still run through libc snprintf (into a buffer that grows
+ * if a width demands it), then the bytes are emitted to the sink — so output is
  * byte-identical to the old fprintf path. */
 #define EMIT_SPEC(TYPE, ARG)                                            \
   do {                                                                  \
@@ -88,6 +88,17 @@ static void print_spec(BkSink *s, const char *flags, char conv, Value v) {
     case 's':
       snprintf(fmt, sizeof(fmt), "%%%ss", flags);
       EMIT_SPEC(const char *, IS_STRING(v) ? AS_CSTRING(v) : "");
+      break;
+    case 'p':
+      (void)flags;
+      bk_sink_cstr(s, "0x");
+      if (IS_PTR(v)) {
+        bk_sink_u64_base(s, (U64)(uintptr_t)AS_PTR(v), 16, false);
+      } else if (IS_OBJ(v)) {
+        bk_sink_u64_base(s, (U64)(uintptr_t)AS_OBJ(v), 16, false);
+      } else {
+        s->emit('0');
+      }
       break;
     default:
       s->emit(conv);

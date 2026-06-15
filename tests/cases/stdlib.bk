@@ -12,6 +12,7 @@
 "ToStr int      = %s\n", ToStr(42);
 "ToStr float    = %s\n", ToStr(3.5);
 "ToStr bool/nil = %s %s\n", ToStr(TRUE), ToStr(FALSE);
+"Ptr nil        = %p\n", NULL;
 
 // Strings interned, so == compares content
 Bool same = Substr("abcd", 0, 2) == "ab";

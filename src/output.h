@@ -1,11 +1,9 @@
 /* output.h - the runtime's output seam.
  *
  * brokm separates *what* to print (formatting, no libc) from *where* the bytes
- * go (the sink). Every byte a program emits passes through `bk_putchar` — the
- * single function a BK_FREESTANDING host replaces with serial/VGA/syscall
- * output. Diagnostics use the separate `bk_stderr` sink (hosted-only). This is
- * the foundation the freestanding profile is built on: swap one function and
- * the whole print path follows. */
+ * go (the sink). Every byte a program emits passes through `bk_putchar`,
+ * which is the seam a later -nostdlib host can replace with serial/VGA/syscall
+ * output. Diagnostics use the separate `bk_stderr` sink (hosted-only). */
 #ifndef BROKM_OUTPUT_H
 #define BROKM_OUTPUT_H
 
@@ -20,8 +18,9 @@ struct BkSink {
 extern BkSink bk_stdout; /* program output; emit -> bk_putchar (swappable) */
 extern BkSink bk_stderr; /* hosted diagnostic channel */
 
-/* The one swappable stdout byte sink (bk_stdout.emit points here). A
- * BK_FREESTANDING build provides its own definition. */
+/* The one stdout byte sink used by program output (bk_stdout.emit points here).
+ * Today's hosted/freestanding AOT builds use output.c's default; a future
+ * -nostdlib host can replace this seam with serial/VGA/syscall output. */
 void bk_putchar(char c);
 
 void bk_sink_cstr(BkSink *s, const char *str); /* emit a NUL-terminated string */

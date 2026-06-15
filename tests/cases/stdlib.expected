@@ -9,6 +9,7 @@ ToInt          = 123
 ToStr int      = 42
 ToStr float    = 3.5
 ToStr bool/nil = TRUE FALSE
+Ptr nil        = 0x0
 eq             = 1
 Abs            = 7 2.5
 Min/Max        = 3 9

@@ -27,11 +27,11 @@ source.bk ──lexer──► tokens ──parser──► AST ──typecheck�
 | `vm.c` | ~810 | The run loop (`run_until`), call/invoke dispatch, the `jit_h_*` semantic helpers all tiers share |
 | `value.c/.h` | small | 16-byte tagged `Value` (layout baked into JIT/AOT — asserted at startup) |
 | `object.c/.h` | ~215 | Heap objects: string/function/native/array/class/instance/map |
-| `output.c/.h` | small | The output seam: all program output flows through `bk_putchar` (the one function a freestanding host swaps); `bk_sink_*` format values to a `BkSink` (`bk_stdout`/`bk_stderr`) |
+| `output.c/.h` | small | The output seam: all program output flows through `bk_putchar`; `bk_sink_*` format values to a `BkSink` (`bk_stdout`/`bk_stderr`), with libc-free integer helpers reused by freestanding |
 | `table.c/.h` | small | String-keyed hash table (interning, globals, methods, maps); `count` includes tombstones |
 | `memory.c` | small | `reallocate()` chokepoint — every GC trigger flows through here |
 | `gc.c` | ~230 | Generational mark-sweep; remembered set; `gc_write_barrier` (load-bearing: every store of a possibly-young object into a possibly-old one needs it — rooting an object does NOT make raw stores into it safe, since a minor GC can promote it mid-function) |
-| `natives.c` | ~900 | Stdlib primitives: print/format, maps, manual memory, strings, I/O, math, scripting/OS, self-hosting bridge |
+| `natives.c` | ~900 | Stdlib primitives: print/format, maps, manual memory, strings, I/O, math, scripting/OS, self-hosting bridge; native registry split into freestanding core vs hosted-only |
 | `jit.c` | shared | JIT driver: page pool, thresholds, per-arch hooks, Value-layout self-test |
 | `jit_arm64.c` / `jit_x64.c` | ~430 ea | Per-arch encoders + chunk walker; faithful stack mirror of the interpreter |
 | `aot.c` | ~260 | `brokm build`: find runtime sources (`$BROKM_HOME` or argv0 dir), drive cc; links the runtime core only (`-DBK_NO_FRONTEND`) and supports the reduced `--freestanding` profile |
@@ -57,12 +57,15 @@ Flat namespace ⇒ module prefixes. `#include "std/std.bk"` pulls everything.
 
 C-native scripting primitives live in `natives.c`: `Args Env Exit Shell
 ShellStr Input Time TimeMs Sleep AppendFile FileExists ReadFile WriteFile`.
+These are hosted-only and are rejected by `brokm build --freestanding`.
 
 ## Recipes
 
 - **New native**: function in `natives.c` (GC-root fresh objects — copy
-  `native_args`), register in `natives_register()`, add to `NAMES[]` in
-  `typecheck.c`, golden test.
+  `native_args`), add it to the right list in `natives.h`
+  (`BK_NATIVE_CORE_LIST` or `BK_NATIVE_HOSTED_ONLY_LIST`), golden test. The
+  type checker consumes the same lists, including the freestanding rejection
+  path.
 - **New stdlib function**: the right `lib/std/*.bk`, module-prefixed name,
   extend that module's golden test (`tests/cases/std_*.bk`, regenerate
   `.expected` from verified output).
@@ -71,7 +74,8 @@ ShellStr Input Time TimeMs Sleep AppendFile FileExists ReadFile WriteFile`.
   inlines-with-guard or bails, `cemit.c` emits the helper call (bracketed
   `FLUSH(); ...; RELOAD();` — emitted code caches `vm->stackTop` in `sp`),
   disasm in `debug.c`, `OPCODE_TABLE` in `natives.c` if brokm code should
-  assemble it.
+  assemble it. If the opcode takes a constant index, decide whether it needs
+  a `_W` wide form and update `instr_len()`/AOT emission together.
 - **New syntax**: token in `lexer.c`/`token.h`, parse in `parser.c`, AST node
   in `ast.c/.h` (+free), check in `typecheck.c`, compile in `compiler.c`;
   consider whether the self-hosting compiler (`examples/realcc_*.bk`) needs it.

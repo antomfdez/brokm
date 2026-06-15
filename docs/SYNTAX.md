@@ -104,7 +104,9 @@ fill printf-style specifiers:
 ```
 
 Supported specifiers: `%d %i` (integer), `%u %o %x %X` (unsigned), `%e %E %f %F %g %G`
-(float), `%c` (char), `%s` (string), `%%`. Width/precision/flags pass through, e.g. `%5.2f`.
+(float), `%c` (char), `%s` (string), `%p` (raw/object address for debugging), `%%`.
+Width/precision/flags pass through in hosted builds, e.g. `%5.2f`. Freestanding
+AOT builds keep the common no-libc subset and currently ignore width/precision/flags.
 `Print(...)` is the same formatter as a named native.
 
 ## Arrays
