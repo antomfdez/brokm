@@ -34,6 +34,7 @@ static F64 to_f64(Value v) {
   return 0.0;
 }
 
+#ifndef BK_FREESTANDING
 /* Format one conversion into `s`. `flags` holds everything between '%' and the
  * conversion char (width, precision, flags). brokm integers are 64-bit, so
  * signed/unsigned integer conversions inject the `ll` length modifier. The
@@ -93,6 +94,56 @@ static void print_spec(BkSink *s, const char *flags, char conv, Value v) {
       break;
   }
 }
+#else
+static void print_spec(BkSink *s, const char *flags, char conv, Value v) {
+  (void)flags; /* Freestanding keeps the small no-snprintf subset for now. */
+  switch (conv) {
+    case 'd':
+    case 'i':
+      bk_sink_i64(s, to_i64(v));
+      break;
+    case 'u':
+      bk_sink_u64_base(s, (U64)to_i64(v), 10, false);
+      break;
+    case 'o':
+      bk_sink_u64_base(s, (U64)to_i64(v), 8, false);
+      break;
+    case 'x':
+      bk_sink_u64_base(s, (U64)to_i64(v), 16, false);
+      break;
+    case 'X':
+      bk_sink_u64_base(s, (U64)to_i64(v), 16, true);
+      break;
+    case 'e':
+    case 'E':
+    case 'f':
+    case 'F':
+    case 'g':
+    case 'G':
+      bk_sink_f64(s, to_f64(v));
+      break;
+    case 'c':
+      s->emit((char)to_i64(v));
+      break;
+    case 's':
+      bk_sink_cstr(s, IS_STRING(v) ? AS_CSTRING(v) : "");
+      break;
+    case 'p':
+      bk_sink_cstr(s, "0x");
+      if (IS_PTR(v)) {
+        bk_sink_u64_base(s, (U64)(uintptr_t)AS_PTR(v), 16, false);
+      } else if (IS_OBJ(v)) {
+        bk_sink_u64_base(s, (U64)(uintptr_t)AS_OBJ(v), 16, false);
+      } else {
+        s->emit('0');
+      }
+      break;
+    default:
+      s->emit(conv);
+      break;
+  }
+}
+#endif
 
 /* printf-style formatting to a byte sink. bk_format() targets bk_stdout (the
  * OP_PRINT / Print() path); PrintErr() targets bk_stderr. */
@@ -400,8 +451,8 @@ static Value native_to_str(int argc, Value *args) {
   char buf[32];
   int n = 0;
   switch (v.type) {
-    case VAL_INT:   n = snprintf(buf, sizeof(buf), "%lld", (long long)AS_INT(v)); break;
-    case VAL_FLOAT: n = snprintf(buf, sizeof(buf), "%g", AS_FLOAT(v)); break;
+    case VAL_INT:   n = bk_i64_to_cstr(buf, sizeof(buf), AS_INT(v)); break;
+    case VAL_FLOAT: n = bk_f64_to_cstr(buf, sizeof(buf), AS_FLOAT(v)); break;
     case VAL_BOOL:  return OBJ_VAL(string_copy(AS_BOOL(v) ? "TRUE" : "FALSE", AS_BOOL(v) ? 4 : 5));
     case VAL_NIL:   return OBJ_VAL(string_copy("nil", 3));
     default:        return OBJ_VAL(string_copy("", 0));

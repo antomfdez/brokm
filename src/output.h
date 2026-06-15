@@ -25,7 +25,11 @@ extern BkSink bk_stderr; /* hosted diagnostic channel */
 void bk_putchar(char c);
 
 void bk_sink_cstr(BkSink *s, const char *str); /* emit a NUL-terminated string */
-void bk_sink_i64(BkSink *s, long long n);      /* emit a decimal integer */
+int bk_i64_to_cstr(char *buf, size_t cap, I64 n);
+int bk_u64_to_cstr(char *buf, size_t cap, U64 n, unsigned base, bool upper);
+int bk_f64_to_cstr(char *buf, size_t cap, F64 x);
+void bk_sink_i64(BkSink *s, I64 n);            /* emit a decimal integer */
+void bk_sink_u64_base(BkSink *s, U64 n, unsigned base, bool upper);
 void bk_sink_f64(BkSink *s, double x);         /* emit a %g float */
 void bk_sink_value(BkSink *s, Value v);        /* emit a value's display form */
 

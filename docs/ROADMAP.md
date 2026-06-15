@@ -722,17 +722,17 @@ vision: a `--freestanding` profile good enough to boot a kernel written in brokm
   the **output seam** (`output.c`): every byte a program prints now flows through one
   `bk_putchar` — the single function a freestanding host replaces with serial/VGA/syscall
   output — with `bk_sink_*` formatting values to a `BkSink` (`bk_stdout`/`bk_stderr`).
-  Value/object printing and the `Print`/`OP_PRINT` formatter were unified onto it; the
-  only libc left in that path is the `snprintf` number conversions, localized to
-  `output.c` for the freestanding phase to replace. Byte-identical across all five paths.
+  Value/object printing and the `Print`/`OP_PRINT` formatter were unified onto it, and
+  freestanding builds now use libc-free integer/string/char formatting plus a small
+  float display path for common `%g`-style values. Byte-identical across all five paths.
   `brokm build --freestanding` now defines `BK_FREESTANDING`, drops `-lm`, compiles out
   hosted-only natives (file IO, libm math, process/env/stdin/time), and rejects those calls
   at AOT typecheck time.
 - **Still open:** `gc.c` compiled to a bump-allocator stub with collection off,
-  replacement for the remaining `snprintf` number conversions, and a `-nostdlib` entry point
-  (`_start`-style, no `main`). Open design question: string/array/map objects allocate — decide
-  whether freestanding keeps the object heap (bump, never freed) or restricts programs to
-  scalars + `MAlloc`/`Peek`/`Poke` in a first cut.
+  full libc-free printf flags/precision plus the remaining diagnostic/introspection string
+  builders, and a `-nostdlib` entry point (`_start`-style, no `main`). Open design question:
+  string/array/map objects allocate — decide whether freestanding keeps the object heap
+  (bump, never freed) or restricts programs to scalars + `MAlloc`/`Peek`/`Poke` in a first cut.
 
 ### Hardening + deferred fixes
 
